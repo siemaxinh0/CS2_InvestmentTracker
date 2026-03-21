@@ -78,6 +78,8 @@ const I18N = (function () {
             priceLoading: '...',
             proxyOffline: 'Serwer cen offline',
             refreshPrices: 'Odśwież ceny',
+            priceSrcSteam: 'Steam',
+            priceSrcCSFloat: 'CSFloat',
         },
 
         en: {
@@ -152,6 +154,8 @@ const I18N = (function () {
             priceLoading: '...',
             proxyOffline: 'Price server offline',
             refreshPrices: 'Refresh prices',
+            priceSrcSteam: 'Steam',
+            priceSrcCSFloat: 'CSFloat',
         }
     };
 

@@ -54,15 +54,10 @@
         }
     }
 
-    async function fetchLivePrice(itemName) {
-        const cacheKey = itemName + '|' + currentCurrency;
-        const cached = priceCache[cacheKey];
-        if (cached && Date.now() - cached.ts < PRICE_CACHE_TTL) {
-            return cached.price;
-        }
-        if (!proxyOnline) return null;
+    // Always fetches in USD, then converts client-side
+    async function fetchSteamPriceUSD(itemName) {
         try {
-            const url = `${PROXY_BASE}/api/steam-price?market_hash_name=${encodeURIComponent(itemName)}&currency=${currentCurrency}`;
+            const url = `${PROXY_BASE}/api/steam-price?market_hash_name=${encodeURIComponent(itemName)}&currency=USD`;
             const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
             if (!res.ok) return null;
             const data = await res.json();
@@ -70,35 +65,87 @@
                 const raw = data.median_price || data.lowest_price || '';
                 const numStr = raw.replace(/[^0-9.,]/g, '').replace(',', '.');
                 const price = parseFloat(numStr);
-                if (!isNaN(price) && price > 0) {
-                    priceCache[cacheKey] = { price, ts: Date.now() };
-                    savePriceCache();
-                    return price;
-                }
+                if (!isNaN(price) && price > 0) return price;
             }
             return null;
-        } catch {
+        } catch { return null; }
+    }
+
+    // CSFloat history/graph endpoint — returns array of { avg_price (cents), day, count }
+    async function fetchCSFloatPriceUSD(itemName) {
+        try {
+            const url = `${PROXY_BASE}/api/csfloat-price?market_hash_name=${encodeURIComponent(itemName)}`;
+            const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+            if (!res.ok) return null;
+            const data = await res.json();
+            // data is an array sorted by day desc; take the latest day's avg price
+            if (Array.isArray(data) && data.length > 0 && data[0].avg_price) {
+                return data[0].avg_price / 100; // cents -> dollars
+            }
             return null;
+        } catch { return null; }
+    }
+
+    // Maps platform name to price source key
+    function platformToSource(platform) {
+        return platform === 'CSFloat' ? 'csfloat' : 'steam';
+    }
+
+    // Cache stores { priceUSD, source, ts } under key "itemName|steam" or "itemName|csfloat"
+    async function fetchLivePrice(itemName, source) {
+        const cacheKey = itemName + '|' + source;
+        const cached = priceCache[cacheKey];
+        if (cached && Date.now() - cached.ts < PRICE_CACHE_TTL) {
+            return cached;
         }
+        if (!proxyOnline) return null;
+
+        let priceUSD = null;
+        if (source === 'csfloat') {
+            priceUSD = await fetchCSFloatPriceUSD(itemName);
+        } else {
+            priceUSD = await fetchSteamPriceUSD(itemName);
+        }
+
+        if (priceUSD !== null) {
+            const entry = { priceUSD, source, ts: Date.now() };
+            priceCache[cacheKey] = entry;
+            savePriceCache();
+            return entry;
+        }
+        return null;
     }
 
     async function refreshAllPrices() {
         await checkProxy();
         if (!proxyOnline) return;
-        const names = [...new Set(investments.map(inv => inv.name))];
-        for (const name of names) {
-            await fetchLivePrice(name);
-            // Small delay to avoid rate limiting
+        // Deduplicate by (item name, source) pair
+        const seen = new Set();
+        const pairs = [];
+        for (const inv of investments) {
+            const name = inv.name;
+            const source = platformToSource(inv.platform || 'Steam Market');
+            const key = name + '|' + source;
+            if (!seen.has(key)) {
+                seen.add(key);
+                pairs.push({ name, source });
+            }
+        }
+        for (const { name, source } of pairs) {
+            await fetchLivePrice(name, source);
             await new Promise(r => setTimeout(r, 400));
         }
         renderTable();
     }
 
-    function getCachedPrice(itemName) {
-        const cacheKey = itemName + '|' + currentCurrency;
+    // Returns { price (in currentCurrency), source } or null
+    function getCachedPrice(itemName, platform) {
+        const source = platformToSource(platform || 'Steam Market');
+        const cacheKey = itemName + '|' + source;
         const cached = priceCache[cacheKey];
         if (cached && Date.now() - cached.ts < PRICE_CACHE_TTL) {
-            return cached.price;
+            const priceConverted = convertCurrency(cached.priceUSD, 'USD', currentCurrency);
+            return { price: priceConverted, source: cached.source };
         }
         return null;
     }
@@ -129,7 +176,7 @@
     const currencySelect = document.getElementById('currencySelect');
     const priceUnitLabel = document.getElementById('priceUnitLabel');
     const dbStatus = document.getElementById('dbStatus');
-    const langToggle = document.getElementById('langToggle');
+    const langSelect = document.getElementById('langSelect');
     const btnRefreshPrices = document.getElementById('btnRefreshPrices');
 
     // Stats
@@ -151,6 +198,77 @@
         localStorage.setItem(STORAGE_KEY, JSON.stringify(investments));
     }
 
+    // ===== Flag URLs (Flagcdn.com - public domain) =====
+    const FLAG_URLS = {
+        USD: 'https://flagcdn.com/w40/us.png',
+        PLN: 'https://flagcdn.com/w40/pl.png',
+        EUR: 'https://flagcdn.com/w40/eu.png',
+        CNY: 'https://flagcdn.com/w40/cn.png',
+        pl: 'https://flagcdn.com/w40/pl.png',
+        en: 'https://flagcdn.com/w40/gb.png',
+    };
+
+    // Custom dropdown with flag images inside each option
+    function buildFlagSelect(selectEl, flagMap) {
+        const parent = selectEl.parentNode;
+        const container = document.createElement('div');
+        container.className = 'flag-dropdown';
+
+        const selected = document.createElement('div');
+        selected.className = 'flag-dropdown-selected';
+        container.appendChild(selected);
+
+        const optionsList = document.createElement('div');
+        optionsList.className = 'flag-dropdown-options';
+        container.appendChild(optionsList);
+
+        function renderOptions() {
+            optionsList.innerHTML = '';
+            Array.from(selectEl.options).forEach(opt => {
+                const item = document.createElement('div');
+                item.className = 'flag-dropdown-option' + (opt.value === selectEl.value ? ' active' : '');
+                item.dataset.value = opt.value;
+                const flagUrl = flagMap[opt.value];
+                item.innerHTML = (flagUrl ? `<img class="flag-dropdown-flag" src="${flagUrl}" alt="">` : '') +
+                    `<span>${opt.textContent}</span>`;
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectEl.value = opt.value;
+                    selectEl.dispatchEvent(new Event('change'));
+                    updateSelected();
+                    optionsList.classList.remove('open');
+                });
+                optionsList.appendChild(item);
+            });
+        }
+
+        function updateSelected() {
+            const opt = selectEl.options[selectEl.selectedIndex];
+            const flagUrl = flagMap[selectEl.value];
+            selected.innerHTML = (flagUrl ? `<img class="flag-dropdown-flag" src="${flagUrl}" alt="">` : '') +
+                `<span>${opt ? opt.textContent : ''}</span><span class="flag-dropdown-arrow">▾</span>`;
+            renderOptions();
+        }
+
+        selected.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Close all other open dropdowns
+            document.querySelectorAll('.flag-dropdown-options.open').forEach(el => {
+                if (el !== optionsList) el.classList.remove('open');
+            });
+            optionsList.classList.toggle('open');
+        });
+
+        document.addEventListener('click', () => optionsList.classList.remove('open'));
+
+        selectEl.style.display = 'none';
+        parent.insertBefore(container, selectEl.nextSibling);
+        updateSelected();
+
+        // Update on external changes
+        selectEl.addEventListener('change', updateSelected);
+    }
+
     // ===== i18n: Apply translations to DOM =====
     function applyI18n() {
         document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -162,7 +280,7 @@
         // Update dynamic text
         const cur = getCurrency();
         priceUnitLabel.textContent = cur.symbol;
-        langToggle.textContent = I18N.getLang() === 'pl' ? 'EN' : 'PL';
+        langSelect.value = I18N.getLang();
         document.documentElement.lang = I18N.getLang();
     }
 
@@ -198,13 +316,16 @@
             updateStats();
         });
 
-        langToggle.addEventListener('click', () => {
-            const newLang = I18N.getLang() === 'pl' ? 'en' : 'pl';
-            I18N.setLang(newLang);
+        langSelect.addEventListener('change', () => {
+            I18N.setLang(langSelect.value);
             applyI18n();
             renderTable();
             updateStats();
         });
+
+        // Build flag+select wrappers
+        buildFlagSelect(currencySelect, FLAG_URLS);
+        buildFlagSelect(langSelect, FLAG_URLS);
 
         filterSearch.addEventListener('input', renderTable);
         filterPlatform.addEventListener('change', renderTable);
@@ -389,7 +510,7 @@
 
         // Fetch live price for the new item
         if (proxyOnline) {
-            fetchLivePrice(itemName).then(() => renderTable());
+            fetchLivePrice(itemName, platform).then(() => renderTable());
         }
     }
 
@@ -491,11 +612,14 @@
                 : getTypeEmoji(inv.type);
 
             // Live price & P/L
-            const livePrice = getCachedPrice(inv.name);
+            const priceData = getCachedPrice(inv.name, invPlatform);
             let livePriceHtml, plHtml;
-            if (livePrice !== null) {
-                livePriceHtml = `<span class="live-price">${formatPrice(livePrice)}</span>`;
-                const totalValue = livePrice * totalQty;
+            if (priceData !== null) {
+                const srcLabel = priceData.source === 'csfloat' ? t('priceSrcCSFloat') : t('priceSrcSteam');
+                const srcClass = priceData.source === 'csfloat' ? 'price-source price-source-csfloat' : 'price-source price-source-steam';
+                const srcTag = `<span class="${srcClass}">${escapeHtml(srcLabel)}</span>`;
+                livePriceHtml = `<span class="live-price">${formatPrice(priceData.price)}</span>${srcTag}`;
+                const totalValue = priceData.price * totalQty;
                 const pl = totalValue - totalSpent;
                 const plPct = totalSpent > 0 ? ((pl / totalSpent) * 100).toFixed(1) : '0.0';
                 const plClass = pl >= 0 ? 'pl-positive' : 'pl-negative';

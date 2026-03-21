@@ -101,7 +101,7 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // CSFloat price
+    // CSFloat price (via public history/graph endpoint — avg daily price in cents)
     // GET /api/csfloat-price?market_hash_name=AK-47 | Redline (Field-Tested)
     if (parsed.pathname === '/api/csfloat-price') {
         const name = parsed.query.market_hash_name;
@@ -110,7 +110,7 @@ const server = http.createServer(async (req, res) => {
             res.end(JSON.stringify({ error: 'market_hash_name required' }));
             return;
         }
-        const cfUrl = `https://csfloat.com/api/v1/listings?market_hash_name=${encodeURIComponent(name)}&sort_by=lowest_price&limit=1`;
+        const cfUrl = `https://csfloat.com/api/v1/history/${encodeURIComponent(name)}/graph`;
         try {
             const result = await fetchJSON(cfUrl);
             res.writeHead(200, { 'Content-Type': 'application/json' });
