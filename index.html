@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CS2 Investment Tracker</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                        <rect width="32" height="32" rx="8" fill="#FF6B00"/>
+                        <path d="M8 16L14 22L24 10" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <h1>CS2 Investment Tracker</h1>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="stats-bar">
+                    <div class="stat">
+                        <span class="stat-label">Inwestycje</span>
+                        <span class="stat-value" id="totalInvestments">0</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Łączna wartość</span>
+                        <span class="stat-value" id="totalValue">$0.00</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Łączny koszt</span>
+                        <span class="stat-value" id="totalCost">$0.00</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Add Investment Panel -->
+            <section class="panel add-panel">
+                <div class="panel-header">
+                    <h2>Dodaj inwestycję</h2>
+                </div>
+                <form id="investmentForm" class="investment-form">
+                    <div class="form-row">
+                        <div class="form-group form-group-large">
+                            <label for="itemSearch">Przedmiot</label>
+                            <div class="autocomplete-wrapper">
+                                <input type="text" id="itemSearch" placeholder="Wyszukaj przedmiot CS2..." autocomplete="off" required>
+                                <div class="autocomplete-dropdown" id="autocompleteDropdown"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="platform">Platforma</label>
+                            <select id="platform" required>
+                                <option value="">Wybierz platformę...</option>
+                                <option value="Steam Market">Steam Market</option>
+                                <option value="CSFloat">CSFloat</option>
+                                <option value="Skinport">Skinport</option>
+                                <option value="Buff163">Buff163</option>
+                                <option value="DMarket">DMarket</option>
+                                <option value="Bitskins">Bitskins</option>
+                                <option value="Tradeit.gg">Tradeit.gg</option>
+                                <option value="Inne">Inne</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="quantity">Ilość</label>
+                            <input type="number" id="quantity" min="1" value="1" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="pricePerUnit">Cena za sztukę ($)</label>
+                            <input type="number" id="pricePerUnit" step="0.01" min="0.01" placeholder="0.00" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="purchaseDate">Data zakupu</label>
+                            <input type="date" id="purchaseDate" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="notes">Notatki (opcjonalne)</label>
+                            <input type="text" id="notes" placeholder="np. Float 0.001, Pattern 661...">
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                            Dodaj transakcję
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Investments List -->
+            <section class="panel investments-panel">
+                <div class="panel-header">
+                    <h2>Twoje inwestycje</h2>
+                    <div class="panel-actions">
+                        <input type="text" id="filterSearch" class="filter-input" placeholder="Filtruj przedmioty...">
+                        <select id="filterPlatform" class="filter-select">
+                            <option value="">Wszystkie platformy</option>
+                            <option value="Steam Market">Steam Market</option>
+                            <option value="CSFloat">CSFloat</option>
+                            <option value="Skinport">Skinport</option>
+                            <option value="Buff163">Buff163</option>
+                            <option value="DMarket">DMarket</option>
+                            <option value="Bitskins">Bitskins</option>
+                            <option value="Tradeit.gg">Tradeit.gg</option>
+                            <option value="Inne">Inne</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="investments-table-wrapper">
+                    <table class="investments-table">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-sort="name">Przedmiot <span class="sort-icon">↕</span></th>
+                                <th class="sortable" data-sort="quantity">Ilość <span class="sort-icon">↕</span></th>
+                                <th class="sortable" data-sort="avgPrice">Śr. cena zakupu <span class="sort-icon">↕</span></th>
+                                <th class="sortable" data-sort="totalSpent">Łączny koszt <span class="sort-icon">↕</span></th>
+                                <th>Platformy</th>
+                                <th>Transze</th>
+                                <th>Akcje</th>
+                            </tr>
+                        </thead>
+                        <tbody id="investmentsTableBody">
+                        </tbody>
+                    </table>
+                    <div class="empty-state" id="emptyState">
+                        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                            <rect x="8" y="16" width="48" height="36" rx="4" stroke="#555" stroke-width="2"/>
+                            <path d="M8 28h48" stroke="#555" stroke-width="2"/>
+                            <circle cx="32" cy="40" r="6" stroke="#555" stroke-width="2"/>
+                            <path d="M30 40l2 2 4-4" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <h3>Brak inwestycji</h3>
+                        <p>Dodaj swoją pierwszą inwestycję używając formularza powyżej</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Transaction Detail Modal -->
+        <div class="modal-overlay" id="modalOverlay">
+            <div class="modal" id="transactionModal">
+                <div class="modal-header">
+                    <h3 id="modalTitle">Szczegóły inwestycji</h3>
+                    <button class="modal-close" id="modalClose">&times;</button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/cs2items.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
