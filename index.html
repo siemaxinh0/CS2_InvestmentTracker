@@ -25,25 +25,29 @@
             <div class="header-right">
                 <div class="stats-bar">
                     <div class="stat">
-                        <span class="stat-label">Inwestycje</span>
+                        <span class="stat-label" data-i18n="statInvestments">Inwestycje</span>
                         <span class="stat-value" id="totalInvestments">0</span>
                     </div>
                     <div class="stat">
-                        <span class="stat-label">Łączna ilość</span>
+                        <span class="stat-label" data-i18n="statTotalQty">Łączna ilość</span>
                         <span class="stat-value" id="totalValue">0 szt.</span>
                     </div>
                     <div class="stat">
-                        <span class="stat-label">Łączny koszt</span>
+                        <span class="stat-label" data-i18n="statTotalCost">Łączny koszt</span>
                         <span class="stat-value" id="totalCost">$0.00</span>
                     </div>
                     <div class="stat stat-currency">
-                        <span class="stat-label">Waluta</span>
+                        <span class="stat-label" data-i18n="statCurrency">Waluta</span>
                         <select id="currencySelect" class="currency-select">
-                            <option value="USD">USD ($)</option>
-                            <option value="PLN">PLN (zł)</option>
-                            <option value="EUR">EUR (€)</option>
-                            <option value="CNY">CNY (¥)</option>
+                            <option value="USD">🇺🇸 USD ($)</option>
+                            <option value="PLN">🇵🇱 PLN (zł)</option>
+                            <option value="EUR">🇪🇺 EUR (€)</option>
+                            <option value="CNY">🇨🇳 CNY (¥)</option>
                         </select>
+                    </div>
+                    <div class="stat stat-lang">
+                        <span class="stat-label" data-i18n="statLanguage">Język</span>
+                        <button id="langToggle" class="lang-toggle">EN</button>
                     </div>
                 </div>
             </div>
@@ -54,24 +58,24 @@
             <!-- Add Investment Panel -->
             <section class="panel add-panel">
                 <div class="panel-header">
-                    <h2>Dodaj inwestycję</h2>
+                    <h2 data-i18n="addInvestment">Dodaj inwestycję</h2>
                 </div>
                 <form id="investmentForm" class="investment-form">
                     <div class="form-row">
                         <div class="form-group form-group-large">
-                            <label for="itemSearch">Przedmiot</label>
+                            <label for="itemSearch" data-i18n="labelItem">Przedmiot</label>
                             <div class="autocomplete-wrapper">
-                                <input type="text" id="itemSearch" placeholder="Wyszukaj przedmiot CS2..." autocomplete="off" required>
+                                <input type="text" id="itemSearch" data-i18n-placeholder="placeholderItem" placeholder="Wyszukaj przedmiot CS2..." autocomplete="off" required>
                                 <div class="autocomplete-dropdown" id="autocompleteDropdown"></div>
-                                <div class="db-status" id="dbStatus">Ładowanie bazy przedmiotów...</div>
+                                <div class="db-status" id="dbStatus"></div>
                             </div>
                         </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="platform">Platforma</label>
+                            <label for="platform" data-i18n="labelPlatform">Platforma</label>
                             <select id="platform" required>
-                                <option value="">Wybierz platformę...</option>
+                                <option value="" data-i18n="placeholderPlatform">Wybierz platformę...</option>
                                 <option value="Steam Market">Steam Market</option>
                                 <option value="CSFloat">CSFloat</option>
                                 <option value="Skinport">Skinport</option>
@@ -83,28 +87,28 @@
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="quantity">Ilość</label>
+                            <label for="quantity" data-i18n="labelQuantity">Ilość</label>
                             <input type="number" id="quantity" min="1" value="1" required>
                         </div>
                         <div class="form-group">
-                            <label for="pricePerUnit">Cena za sztukę (<span id="priceUnitLabel">$</span>)</label>
+                            <label for="pricePerUnit"><span data-i18n="labelPricePerUnit">Cena za sztukę</span> (<span id="priceUnitLabel">$</span>)</label>
                             <input type="number" id="pricePerUnit" step="0.01" min="0.01" placeholder="0.00" required>
                         </div>
                         <div class="form-group">
-                            <label for="purchaseDate">Data zakupu</label>
+                            <label for="purchaseDate" data-i18n="labelDate">Data zakupu</label>
                             <input type="date" id="purchaseDate" required>
                         </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="notes">Notatki (opcjonalne)</label>
-                            <input type="text" id="notes" placeholder="np. Float 0.001, Pattern 661...">
+                            <label for="notes" data-i18n="labelNotes">Notatki (opcjonalne)</label>
+                            <input type="text" id="notes" data-i18n-placeholder="placeholderNotes" placeholder="np. Float 0.001, Pattern 661...">
                         </div>
                     </div>
                     <div class="form-actions">
-                        <button type="submit" class="btn btn-primary">
+                        <button type="submit" class="btn btn-primary" id="btnSubmit">
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                            Dodaj transakcję
+                            <span data-i18n="btnAddTransaction">Dodaj transakcję</span>
                         </button>
                     </div>
                 </form>
@@ -113,11 +117,11 @@
             <!-- Investments List -->
             <section class="panel investments-panel">
                 <div class="panel-header">
-                    <h2>Twoje inwestycje</h2>
+                    <h2 data-i18n="yourInvestments">Twoje inwestycje</h2>
                     <div class="panel-actions">
-                        <input type="text" id="filterSearch" class="filter-input" placeholder="Filtruj przedmioty...">
+                        <input type="text" id="filterSearch" class="filter-input" data-i18n-placeholder="filterPlaceholder" placeholder="Filtruj przedmioty...">
                         <select id="filterPlatform" class="filter-select">
-                            <option value="">Wszystkie platformy</option>
+                            <option value="" data-i18n="allPlatforms">Wszystkie platformy</option>
                             <option value="Steam Market">Steam Market</option>
                             <option value="CSFloat">CSFloat</option>
                             <option value="Skinport">Skinport</option>
@@ -127,19 +131,24 @@
                             <option value="Tradeit.gg">Tradeit.gg</option>
                             <option value="Inne">Inne</option>
                         </select>
+                        <button class="btn btn-sm btn-ghost" id="btnRefreshPrices" title="Refresh prices">
+                            <span data-i18n="refreshPrices">Odśwież ceny</span>
+                        </button>
                     </div>
                 </div>
                 <div class="investments-table-wrapper">
                     <table class="investments-table">
                         <thead>
                             <tr>
-                                <th class="sortable" data-sort="name">Przedmiot <span class="sort-icon">↕</span></th>
-                                <th class="sortable" data-sort="quantity">Ilość <span class="sort-icon">↕</span></th>
-                                <th class="sortable" data-sort="avgPrice">Śr. cena zakupu <span class="sort-icon">↕</span></th>
-                                <th class="sortable" data-sort="totalSpent">Łączny koszt <span class="sort-icon">↕</span></th>
-                                <th>Platformy</th>
-                                <th>Transze</th>
-                                <th>Akcje</th>
+                                <th class="sortable" data-sort="name"><span data-i18n="colItem">Przedmiot</span> <span class="sort-icon">↕</span></th>
+                                <th class="sortable" data-sort="quantity"><span data-i18n="colQuantity">Ilość</span> <span class="sort-icon">↕</span></th>
+                                <th class="sortable" data-sort="avgPrice"><span data-i18n="colAvgPrice">Śr. cena zakupu</span> <span class="sort-icon">↕</span></th>
+                                <th class="sortable" data-sort="totalSpent"><span data-i18n="colTotalCost">Łączny koszt</span> <span class="sort-icon">↕</span></th>
+                                <th data-i18n="colLivePrice">Cena live</th>
+                                <th data-i18n="colPL">Zysk/Strata</th>
+                                <th data-i18n="colPlatform">Platforma</th>
+                                <th data-i18n="colTranches">Transze</th>
+                                <th data-i18n="colActions">Akcje</th>
                             </tr>
                         </thead>
                         <tbody id="investmentsTableBody">
@@ -152,8 +161,8 @@
                             <circle cx="32" cy="40" r="6" stroke="#555" stroke-width="2"/>
                             <path d="M30 40l2 2 4-4" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <h3>Brak inwestycji</h3>
-                        <p>Dodaj swoją pierwszą inwestycję używając formularza powyżej</p>
+                        <h3 data-i18n="noInvestments">Brak inwestycji</h3>
+                        <p data-i18n="noInvestmentsDesc">Dodaj swoją pierwszą inwestycję używając formularza powyżej</p>
                     </div>
                 </div>
             </section>
@@ -163,7 +172,7 @@
         <div class="modal-overlay" id="modalOverlay">
             <div class="modal" id="transactionModal">
                 <div class="modal-header">
-                    <h3 id="modalTitle">Szczegóły inwestycji</h3>
+                    <h3 id="modalTitle"></h3>
                     <button class="modal-close" id="modalClose">&times;</button>
                 </div>
                 <div class="modal-body" id="modalBody">
@@ -172,6 +181,7 @@
         </div>
     </div>
 
+    <script src="js/i18n.js"></script>
     <script src="js/cs2db.js"></script>
     <script src="js/app.js"></script>
 </body>

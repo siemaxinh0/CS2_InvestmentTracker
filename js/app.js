@@ -3,6 +3,8 @@
 (function () {
     'use strict';
 
+    const t = I18N.t.bind(I18N);
+
     // ===== Currency =====
     const CURRENCIES = {
         USD: { symbol: '$', rate: 1, locale: 'en-US' },
@@ -20,6 +22,85 @@
     function formatPrice(amountInUserCurrency) {
         const cur = getCurrency();
         return cur.symbol + amountInUserCurrency.toFixed(2);
+    }
+
+    // ===== Live Price State =====
+    const PROXY_BASE = 'http://localhost:3000';
+    const PRICE_CACHE_KEY = 'cs2_price_cache';
+    const PRICE_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+    let priceCache = loadPriceCache();
+    let proxyOnline = false;
+
+    function loadPriceCache() {
+        try {
+            const raw = localStorage.getItem(PRICE_CACHE_KEY);
+            if (!raw) return {};
+            return JSON.parse(raw);
+        } catch { return {}; }
+    }
+
+    function savePriceCache() {
+        try {
+            localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify(priceCache));
+        } catch { /* ignore */ }
+    }
+
+    async function checkProxy() {
+        try {
+            const res = await fetch(PROXY_BASE + '/health', { signal: AbortSignal.timeout(2000) });
+            proxyOnline = res.ok;
+        } catch {
+            proxyOnline = false;
+        }
+    }
+
+    async function fetchLivePrice(itemName) {
+        const cacheKey = itemName + '|' + currentCurrency;
+        const cached = priceCache[cacheKey];
+        if (cached && Date.now() - cached.ts < PRICE_CACHE_TTL) {
+            return cached.price;
+        }
+        if (!proxyOnline) return null;
+        try {
+            const url = `${PROXY_BASE}/api/steam-price?market_hash_name=${encodeURIComponent(itemName)}&currency=${currentCurrency}`;
+            const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+            if (!res.ok) return null;
+            const data = await res.json();
+            if (data && data.success) {
+                const raw = data.median_price || data.lowest_price || '';
+                const numStr = raw.replace(/[^0-9.,]/g, '').replace(',', '.');
+                const price = parseFloat(numStr);
+                if (!isNaN(price) && price > 0) {
+                    priceCache[cacheKey] = { price, ts: Date.now() };
+                    savePriceCache();
+                    return price;
+                }
+            }
+            return null;
+        } catch {
+            return null;
+        }
+    }
+
+    async function refreshAllPrices() {
+        await checkProxy();
+        if (!proxyOnline) return;
+        const names = [...new Set(investments.map(inv => inv.name))];
+        for (const name of names) {
+            await fetchLivePrice(name);
+            // Small delay to avoid rate limiting
+            await new Promise(r => setTimeout(r, 400));
+        }
+        renderTable();
+    }
+
+    function getCachedPrice(itemName) {
+        const cacheKey = itemName + '|' + currentCurrency;
+        const cached = priceCache[cacheKey];
+        if (cached && Date.now() - cached.ts < PRICE_CACHE_TTL) {
+            return cached.price;
+        }
+        return null;
     }
 
     // ===== State =====
@@ -48,6 +129,8 @@
     const currencySelect = document.getElementById('currencySelect');
     const priceUnitLabel = document.getElementById('priceUnitLabel');
     const dbStatus = document.getElementById('dbStatus');
+    const langToggle = document.getElementById('langToggle');
+    const btnRefreshPrices = document.getElementById('btnRefreshPrices');
 
     // Stats
     const totalInvestmentsEl = document.getElementById('totalInvestments');
@@ -68,6 +151,21 @@
         localStorage.setItem(STORAGE_KEY, JSON.stringify(investments));
     }
 
+    // ===== i18n: Apply translations to DOM =====
+    function applyI18n() {
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            el.textContent = t(el.dataset.i18n);
+        });
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            el.placeholder = t(el.dataset.i18nPlaceholder);
+        });
+        // Update dynamic text
+        const cur = getCurrency();
+        priceUnitLabel.textContent = cur.symbol;
+        langToggle.textContent = I18N.getLang() === 'pl' ? 'EN' : 'PL';
+        document.documentElement.lang = I18N.getLang();
+    }
+
     // ===== Initialize =====
     function init() {
         // Set today's date as default
@@ -75,7 +173,9 @@
 
         // Restore currency
         currencySelect.value = currentCurrency;
-        updateCurrencyUI();
+
+        // Apply translations
+        applyI18n();
 
         // Event listeners
         form.addEventListener('submit', handleAddInvestment);
@@ -93,7 +193,15 @@
         currencySelect.addEventListener('change', () => {
             currentCurrency = currencySelect.value;
             localStorage.setItem(CURRENCY_KEY, currentCurrency);
-            updateCurrencyUI();
+            applyI18n();
+            renderTable();
+            updateStats();
+        });
+
+        langToggle.addEventListener('click', () => {
+            const newLang = I18N.getLang() === 'pl' ? 'en' : 'pl';
+            I18N.setLang(newLang);
+            applyI18n();
             renderTable();
             updateStats();
         });
@@ -104,6 +212,11 @@
         // Sortable headers
         document.querySelectorAll('.sortable').forEach(th => {
             th.addEventListener('click', () => handleSort(th.dataset.sort));
+        });
+
+        // Refresh prices button
+        btnRefreshPrices.addEventListener('click', () => {
+            refreshAllPrices();
         });
 
         // Modal
@@ -118,29 +231,27 @@
         renderTable();
         updateStats();
 
-        // Load item database
+        // Load item database then check price proxy
         loadItemDatabase();
-    }
-
-    function updateCurrencyUI() {
-        const cur = getCurrency();
-        priceUnitLabel.textContent = cur.symbol;
+        checkProxy().then(() => {
+            if (proxyOnline) refreshAllPrices();
+        });
     }
 
     // ===== Item Database =====
     async function loadItemDatabase() {
-        dbStatus.textContent = 'Ładowanie bazy przedmiotów...';
+        dbStatus.textContent = t('dbLoading');
         dbStatus.classList.add('visible');
 
         await CS2Database.loadItems((count, done, completed, total) => {
             if (done) {
-                dbStatus.textContent = `✓ Załadowano ${count.toLocaleString()} przedmiotów`;
+                dbStatus.textContent = t('dbDone', { count: count.toLocaleString() });
                 dbStatus.classList.add('done');
                 setTimeout(() => {
                     dbStatus.classList.remove('visible');
                 }, 3000);
             } else {
-                dbStatus.textContent = `Ładowanie... (${completed}/${total} kategorii, ${count.toLocaleString()} przedmiotów)`;
+                dbStatus.textContent = t('dbProgress', { completed, total, count: count.toLocaleString() });
             }
         });
     }
@@ -228,6 +339,7 @@
     }
 
     // ===== Add Investment =====
+    // Now groups by item name + platform (each platform = separate investment row)
     function handleAddInvestment(e) {
         e.preventDefault();
 
@@ -250,21 +362,22 @@
             notes
         };
 
-        // Check if investment for this item already exists
+        // Match by BOTH name AND platform
         const existing = investments.find(inv =>
-            inv.name.toLowerCase() === itemName.toLowerCase()
+            inv.name.toLowerCase() === itemName.toLowerCase() &&
+            inv.platform === platform
         );
 
         if (existing) {
             existing.tranches.push(tranche);
         } else {
-            // Find item from database
             const dbItem = CS2Database.findByName(itemName);
             investments.push({
                 id: generateId(),
                 name: itemName,
                 type: dbItem ? dbItem.type : 'Inne',
                 image: dbItem ? dbItem.image : null,
+                platform: platform,
                 tranches: [tranche]
             });
         }
@@ -273,6 +386,11 @@
         renderTable();
         updateStats();
         resetForm();
+
+        // Fetch live price for the new item
+        if (proxyOnline) {
+            fetchLivePrice(itemName).then(() => renderTable());
+        }
     }
 
     function resetForm() {
@@ -290,7 +408,6 @@
     }
 
     function calcTotalSpent(investment) {
-        // Convert all tranches to current currency
         return investment.tranches.reduce((sum, t) => {
             const trancheCost = t.quantity * t.pricePerUnit;
             return sum + convertCurrency(trancheCost, t.currency || 'USD', currentCurrency);
@@ -303,15 +420,10 @@
         return calcTotalSpent(investment) / totalQty;
     }
 
-    function calcPlatforms(investment) {
-        return [...new Set(investment.tranches.map(t => t.platform))];
-    }
-
     function convertCurrency(amount, fromCurrency, toCurrency) {
         if (fromCurrency === toCurrency) return amount;
         const fromRate = (CURRENCIES[fromCurrency] || CURRENCIES.USD).rate;
         const toRate = (CURRENCIES[toCurrency] || CURRENCIES.USD).rate;
-        // Convert to USD first, then to target
         const usdAmount = amount / fromRate;
         return usdAmount * toRate;
     }
@@ -342,6 +454,7 @@
 
         if (platformFilter) {
             filtered = filtered.filter(inv =>
+                (inv.platform || '') === platformFilter ||
                 inv.tranches.some(t => t.platform === platformFilter)
             );
         }
@@ -360,9 +473,9 @@
             const totalQty = calcTotalQuantity(inv);
             const avgPrice = calcAvgPrice(inv);
             const totalSpent = calcTotalSpent(inv);
-            const platforms = calcPlatforms(inv);
+            const invPlatform = inv.platform || (inv.tranches[0] ? inv.tranches[0].platform : '?');
 
-            // Try to get image from DB if not stored on investment
+            // Try to get image from DB if not stored
             let imgUrl = inv.image;
             if (!imgUrl && CS2Database.isLoaded()) {
                 const dbItem = CS2Database.findByName(inv.name);
@@ -377,6 +490,21 @@
                 ? `<img class="item-icon-img" src="${escapeAttr(imgUrl)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='${getTypeEmoji(inv.type)}';">`
                 : getTypeEmoji(inv.type);
 
+            // Live price & P/L
+            const livePrice = getCachedPrice(inv.name);
+            let livePriceHtml, plHtml;
+            if (livePrice !== null) {
+                livePriceHtml = `<span class="live-price">${formatPrice(livePrice)}</span>`;
+                const totalValue = livePrice * totalQty;
+                const pl = totalValue - totalSpent;
+                const plPct = totalSpent > 0 ? ((pl / totalSpent) * 100).toFixed(1) : '0.0';
+                const plClass = pl >= 0 ? 'pl-positive' : 'pl-negative';
+                plHtml = `<span class="${plClass}">${pl >= 0 ? '+' : ''}${formatPrice(pl)} (${pl >= 0 ? '+' : ''}${plPct}%)</span>`;
+            } else {
+                livePriceHtml = `<span class="live-price-na">${t('priceNotAvailable')}</span>`;
+                plHtml = `<span class="live-price-na">${t('priceNotAvailable')}</span>`;
+            }
+
             return `<tr data-id="${inv.id}">
                 <td>
                     <div class="item-cell">
@@ -390,20 +518,18 @@
                 <td>${totalQty}</td>
                 <td>${formatPrice(avgPrice)}</td>
                 <td>${formatPrice(totalSpent)}</td>
-                <td>
-                    <div class="platform-badges">
-                        ${platforms.map(p => `<span class="platform-badge">${escapeHtml(p)}</span>`).join('')}
-                    </div>
-                </td>
+                <td>${livePriceHtml}</td>
+                <td>${plHtml}</td>
+                <td><span class="platform-badge">${escapeHtml(invPlatform)}</span></td>
                 <td>
                     <span class="tranches-count" onclick="window.app.showTranches('${inv.id}')">
-                        ${inv.tranches.length} ${inv.tranches.length === 1 ? 'transza' : (inv.tranches.length < 5 ? 'transze' : 'transz')}
+                        ${inv.tranches.length} ${I18N.trancheWord(inv.tranches.length)}
                     </span>
                 </td>
                 <td>
                     <div class="actions-cell">
-                        <button class="btn btn-sm btn-ghost" onclick="window.app.addTranche('${inv.id}')" title="Dodaj transzę">+</button>
-                        <button class="btn btn-sm btn-danger" onclick="window.app.deleteInvestment('${inv.id}')" title="Usuń">✕</button>
+                        <button class="btn btn-sm btn-ghost" onclick="window.app.addTranche('${inv.id}')" title="+">+</button>
+                        <button class="btn btn-sm btn-danger" onclick="window.app.deleteInvestment('${inv.id}')" title="✕">✕</button>
                     </div>
                 </td>
             </tr>`;
@@ -470,7 +596,6 @@
             currentSort.dir = 'asc';
         }
 
-        // Update header classes
         document.querySelectorAll('.sortable').forEach(th => {
             th.classList.remove('sort-asc', 'sort-desc');
             if (th.dataset.sort === currentSort.field) {
@@ -488,7 +613,7 @@
         const totalQty = investments.reduce((sum, inv) => sum + calcTotalQuantity(inv), 0);
         const totalSpent = investments.reduce((sum, inv) => sum + calcTotalSpent(inv), 0);
 
-        totalValueEl.textContent = totalQty + ' szt.';
+        totalValueEl.textContent = totalQty + ' ' + t('unitPcs');
         totalCostEl.textContent = formatPrice(totalSpent);
     }
 
@@ -497,7 +622,8 @@
         const inv = investments.find(i => i.id === investmentId);
         if (!inv) return;
 
-        modalTitle.textContent = inv.name;
+        const invPlatform = inv.platform || (inv.tranches[0] ? inv.tranches[0].platform : '');
+        modalTitle.textContent = inv.name + (invPlatform ? ' — ' + invPlatform : '');
 
         const totalQty = calcTotalQuantity(inv);
         const avgPrice = calcAvgPrice(inv);
@@ -505,51 +631,51 @@
 
         modalBody.innerHTML = `
             <div class="tranche-list">
-                ${inv.tranches.map((t, idx) => `
+                ${inv.tranches.map((tr, idx) => `
                     <div class="tranche-card">
                         <div class="tranche-info">
                             <div class="tranche-field">
-                                <span class="field-label">Transza #${idx + 1}</span>
-                                <span class="field-value">${escapeHtml(t.platform)}</span>
+                                <span class="field-label">${t('trancheLabel')} #${idx + 1}</span>
+                                <span class="field-value">${escapeHtml(tr.platform)}</span>
                             </div>
                             <div class="tranche-field">
-                                <span class="field-label">Ilość</span>
-                                <span class="field-value">${t.quantity}</span>
+                                <span class="field-label">${t('fieldQty')}</span>
+                                <span class="field-value">${tr.quantity}</span>
                             </div>
                             <div class="tranche-field">
-                                <span class="field-label">Cena/szt.</span>
-                                <span class="field-value">${formatTranchePrice(t)}</span>
+                                <span class="field-label">${t('fieldPricePerUnit')}</span>
+                                <span class="field-value">${formatTranchePrice(tr)}</span>
                             </div>
                             <div class="tranche-field">
-                                <span class="field-label">Łączny koszt</span>
-                                <span class="field-value">${formatTrancheCost(t)}</span>
+                                <span class="field-label">${t('fieldTotalCost')}</span>
+                                <span class="field-value">${formatTrancheCost(tr)}</span>
                             </div>
                             <div class="tranche-field">
-                                <span class="field-label">Waluta</span>
-                                <span class="field-value">${t.currency || 'USD'}</span>
+                                <span class="field-label">${t('fieldCurrency')}</span>
+                                <span class="field-value">${tr.currency || 'USD'}</span>
                             </div>
                             <div class="tranche-field">
-                                <span class="field-label">Data</span>
-                                <span class="field-value">${t.date}</span>
+                                <span class="field-label">${t('fieldDate')}</span>
+                                <span class="field-value">${tr.date}</span>
                             </div>
-                            ${t.notes ? `
+                            ${tr.notes ? `
                             <div class="tranche-field">
-                                <span class="field-label">Notatki</span>
-                                <span class="field-value">${escapeHtml(t.notes)}</span>
+                                <span class="field-label">${t('fieldNotes')}</span>
+                                <span class="field-value">${escapeHtml(tr.notes)}</span>
                             </div>` : ''}
                         </div>
                         <div class="tranche-actions">
-                            <button class="btn btn-sm btn-danger" onclick="window.app.deleteTranche('${inv.id}', '${t.id}')">Usuń</button>
+                            <button class="btn btn-sm btn-danger" onclick="window.app.deleteTranche('${inv.id}', '${tr.id}')">${t('btnDelete')}</button>
                         </div>
                     </div>
                 `).join('')}
             </div>
             <div class="summary-row">
                 <div>
-                    <div class="summary-label">Łączna ilość: ${totalQty} szt.</div>
-                    <div class="summary-label">Łączny koszt (${currentCurrency}): ${formatPrice(totalSpent)}</div>
+                    <div class="summary-label">${t('summaryTotalQty')}: ${totalQty} ${t('unitPcs')}</div>
+                    <div class="summary-label">${t('summaryTotalCost')} (${currentCurrency}): ${formatPrice(totalSpent)}</div>
                 </div>
-                <div class="summary-value">Śr. cena: ${formatPrice(avgPrice)}</div>
+                <div class="summary-value">${t('summaryAvgPrice')}: ${formatPrice(avgPrice)}</div>
             </div>
         `;
 
@@ -561,17 +687,15 @@
         const inv = investments.find(i => i.id === investmentId);
         if (!inv) return;
 
-        // Pre-fill form with item name
         itemSearch.value = inv.name;
+        if (inv.platform) platformSelect.value = inv.platform;
         itemSearch.focus();
-
-        // Scroll to form
         form.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     // ===== Delete =====
     function deleteInvestment(investmentId) {
-        if (!confirm('Czy na pewno chcesz usunąć tę inwestycję i wszystkie jej transze?')) return;
+        if (!confirm(t('confirmDeleteInvestment'))) return;
         investments = investments.filter(i => i.id !== investmentId);
         saveInvestments();
         renderTable();
@@ -583,10 +707,10 @@
         if (!inv) return;
 
         if (inv.tranches.length === 1) {
-            if (!confirm('To jedyna transza. Usunięcie jej usunie całą inwestycję. Kontynuować?')) return;
+            if (!confirm(t('confirmDeleteLastTranche'))) return;
             investments = investments.filter(i => i.id !== investmentId);
         } else {
-            inv.tranches = inv.tranches.filter(t => t.id !== trancheId);
+            inv.tranches = inv.tranches.filter(tr => tr.id !== trancheId);
         }
 
         saveInvestments();
@@ -594,7 +718,6 @@
         updateStats();
         closeModal();
 
-        // Re-open if still exists
         if (investments.find(i => i.id === investmentId)) {
             showTranches(investmentId);
         }

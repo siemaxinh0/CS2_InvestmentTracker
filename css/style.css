@@ -115,6 +115,29 @@ body {
     color: var(--text-primary);
 }
 
+/* Language Toggle */
+.stat-lang {
+    align-items: flex-end;
+}
+
+.lang-toggle {
+    padding: 4px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.lang-toggle:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 /* ===== Main ===== */
 .main {
     max-width: 1400px;
@@ -756,4 +779,27 @@ body {
 
 .db-status.done {
     color: var(--green);
+}
+
+/* ===== Live Price & P/L ===== */
+.live-price {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.live-price-na {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.pl-positive {
+    color: var(--green);
+    font-weight: 600;
+    font-size: 0.82rem;
+}
+
+.pl-negative {
+    color: var(--red);
+    font-weight: 600;
+    font-size: 0.82rem;
 }
