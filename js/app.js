@@ -3,6 +3,25 @@
 (function () {
     'use strict';
 
+    // ===== Currency =====
+    const CURRENCIES = {
+        USD: { symbol: '$', rate: 1, locale: 'en-US' },
+        PLN: { symbol: 'zł', rate: 4.05, locale: 'pl-PL' },
+        EUR: { symbol: '€', rate: 0.92, locale: 'de-DE' },
+        CNY: { symbol: '¥', rate: 7.24, locale: 'zh-CN' },
+    };
+    const CURRENCY_KEY = 'cs2_currency';
+    let currentCurrency = localStorage.getItem(CURRENCY_KEY) || 'USD';
+
+    function getCurrency() {
+        return CURRENCIES[currentCurrency] || CURRENCIES.USD;
+    }
+
+    function formatPrice(amountInUserCurrency) {
+        const cur = getCurrency();
+        return cur.symbol + amountInUserCurrency.toFixed(2);
+    }
+
     // ===== State =====
     const STORAGE_KEY = 'cs2_investments';
     let investments = loadInvestments();
@@ -26,6 +45,9 @@
     const modalTitle = document.getElementById('modalTitle');
     const modalBody = document.getElementById('modalBody');
     const modalClose = document.getElementById('modalClose');
+    const currencySelect = document.getElementById('currencySelect');
+    const priceUnitLabel = document.getElementById('priceUnitLabel');
+    const dbStatus = document.getElementById('dbStatus');
 
     // Stats
     const totalInvestmentsEl = document.getElementById('totalInvestments');
@@ -51,6 +73,10 @@
         // Set today's date as default
         dateInput.value = new Date().toISOString().split('T')[0];
 
+        // Restore currency
+        currencySelect.value = currentCurrency;
+        updateCurrencyUI();
+
         // Event listeners
         form.addEventListener('submit', handleAddInvestment);
         itemSearch.addEventListener('input', handleAutocomplete);
@@ -62,6 +88,14 @@
             if (!e.target.closest('.autocomplete-wrapper')) {
                 closeAutocomplete();
             }
+        });
+
+        currencySelect.addEventListener('change', () => {
+            currentCurrency = currencySelect.value;
+            localStorage.setItem(CURRENCY_KEY, currentCurrency);
+            updateCurrencyUI();
+            renderTable();
+            updateStats();
         });
 
         filterSearch.addEventListener('input', renderTable);
@@ -83,31 +117,61 @@
 
         renderTable();
         updateStats();
+
+        // Load item database
+        loadItemDatabase();
+    }
+
+    function updateCurrencyUI() {
+        const cur = getCurrency();
+        priceUnitLabel.textContent = cur.symbol;
+    }
+
+    // ===== Item Database =====
+    async function loadItemDatabase() {
+        dbStatus.textContent = 'Ładowanie bazy przedmiotów...';
+        dbStatus.classList.add('visible');
+
+        await CS2Database.loadItems((count, done, completed, total) => {
+            if (done) {
+                dbStatus.textContent = `✓ Załadowano ${count.toLocaleString()} przedmiotów`;
+                dbStatus.classList.add('done');
+                setTimeout(() => {
+                    dbStatus.classList.remove('visible');
+                }, 3000);
+            } else {
+                dbStatus.textContent = `Ładowanie... (${completed}/${total} kategorii, ${count.toLocaleString()} przedmiotów)`;
+            }
+        });
     }
 
     // ===== Autocomplete =====
     function handleAutocomplete() {
-        const query = itemSearch.value.trim().toLowerCase();
+        const query = itemSearch.value.trim();
         if (query.length < 1) {
             closeAutocomplete();
             return;
         }
 
-        const results = CS2_ITEMS.filter(item =>
-            item.name.toLowerCase().includes(query)
-        ).slice(0, 50);
+        const results = CS2Database.search(query, 40);
 
         if (results.length === 0) {
             closeAutocomplete();
             return;
         }
 
+        const queryLower = query.toLowerCase();
         selectedAutocompleteIndex = -1;
         autocompleteDropdown.innerHTML = results.map((item, i) => {
-            const highlighted = highlightMatch(item.name, query);
-            return `<div class="autocomplete-item" data-index="${i}" data-name="${escapeAttr(item.name)}">
-                <span class="item-type">${escapeHtml(item.type)}</span>
+            const highlighted = highlightMatch(item.name, queryLower);
+            const imgHtml = item.image
+                ? `<img class="ac-img" src="${escapeAttr(item.image)}" alt="" loading="lazy" onerror="this.style.display='none'">`
+                : `<span class="ac-img-placeholder">${getTypeEmoji(item.type)}</span>`;
+            const rarityStyle = item.rarity ? ` style="border-left: 3px solid ${item.rarity}"` : '';
+            return `<div class="autocomplete-item" data-index="${i}" data-name="${escapeAttr(item.name)}"${rarityStyle}>
+                ${imgHtml}
                 <span class="item-name">${highlighted}</span>
+                <span class="item-type">${escapeHtml(item.type)}</span>
             </div>`;
         }).join('');
 
@@ -180,6 +244,7 @@
             id: generateId(),
             quantity,
             pricePerUnit,
+            currency: currentCurrency,
             platform,
             date,
             notes
@@ -193,14 +258,13 @@
         if (existing) {
             existing.tranches.push(tranche);
         } else {
-            // Find item type from database
-            const dbItem = CS2_ITEMS.find(i =>
-                i.name.toLowerCase() === itemName.toLowerCase()
-            );
+            // Find item from database
+            const dbItem = CS2Database.findByName(itemName);
             investments.push({
                 id: generateId(),
                 name: itemName,
                 type: dbItem ? dbItem.type : 'Inne',
+                image: dbItem ? dbItem.image : null,
                 tranches: [tranche]
             });
         }
@@ -226,7 +290,11 @@
     }
 
     function calcTotalSpent(investment) {
-        return investment.tranches.reduce((sum, t) => sum + (t.quantity * t.pricePerUnit), 0);
+        // Convert all tranches to current currency
+        return investment.tranches.reduce((sum, t) => {
+            const trancheCost = t.quantity * t.pricePerUnit;
+            return sum + convertCurrency(trancheCost, t.currency || 'USD', currentCurrency);
+        }, 0);
     }
 
     function calcAvgPrice(investment) {
@@ -237,6 +305,26 @@
 
     function calcPlatforms(investment) {
         return [...new Set(investment.tranches.map(t => t.platform))];
+    }
+
+    function convertCurrency(amount, fromCurrency, toCurrency) {
+        if (fromCurrency === toCurrency) return amount;
+        const fromRate = (CURRENCIES[fromCurrency] || CURRENCIES.USD).rate;
+        const toRate = (CURRENCIES[toCurrency] || CURRENCIES.USD).rate;
+        // Convert to USD first, then to target
+        const usdAmount = amount / fromRate;
+        return usdAmount * toRate;
+    }
+
+    function formatTrancheCost(tranche) {
+        const origCur = CURRENCIES[tranche.currency || 'USD'] || CURRENCIES.USD;
+        const cost = tranche.quantity * tranche.pricePerUnit;
+        return origCur.symbol + cost.toFixed(2);
+    }
+
+    function formatTranchePrice(tranche) {
+        const origCur = CURRENCIES[tranche.currency || 'USD'] || CURRENCIES.USD;
+        return origCur.symbol + tranche.pricePerUnit.toFixed(2);
     }
 
     // ===== Render Table =====
@@ -274,10 +362,25 @@
             const totalSpent = calcTotalSpent(inv);
             const platforms = calcPlatforms(inv);
 
+            // Try to get image from DB if not stored on investment
+            let imgUrl = inv.image;
+            if (!imgUrl && CS2Database.isLoaded()) {
+                const dbItem = CS2Database.findByName(inv.name);
+                if (dbItem && dbItem.image) {
+                    imgUrl = dbItem.image;
+                    inv.image = imgUrl;
+                    saveInvestments();
+                }
+            }
+
+            const iconHtml = imgUrl
+                ? `<img class="item-icon-img" src="${escapeAttr(imgUrl)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='${getTypeEmoji(inv.type)}';">`
+                : getTypeEmoji(inv.type);
+
             return `<tr data-id="${inv.id}">
                 <td>
                     <div class="item-cell">
-                        <div class="item-icon">${getTypeAbbr(inv.type)}</div>
+                        <div class="item-icon">${iconHtml}</div>
                         <div class="item-info">
                             <div class="item-name">${escapeHtml(inv.name)}</div>
                             ${inv.tranches[0]?.notes ? `<div class="item-notes">${escapeHtml(inv.tranches[0].notes)}</div>` : ''}
@@ -285,8 +388,8 @@
                     </div>
                 </td>
                 <td>${totalQty}</td>
-                <td>$${avgPrice.toFixed(2)}</td>
-                <td>$${totalSpent.toFixed(2)}</td>
+                <td>${formatPrice(avgPrice)}</td>
+                <td>${formatPrice(totalSpent)}</td>
                 <td>
                     <div class="platform-badges">
                         ${platforms.map(p => `<span class="platform-badge">${escapeHtml(p)}</span>`).join('')}
@@ -307,7 +410,7 @@
         }).join('');
     }
 
-    function getTypeAbbr(type) {
+    function getTypeEmoji(type) {
         const map = {
             'Knife': '🔪',
             'Gloves': '🧤',
@@ -317,12 +420,16 @@
             'Shotgun': '🔫',
             'Machine Gun': '🔫',
             'Container': '📦',
+            'Case': '📦',
             'Sticker': '🏷️',
             'Agent': '🕵️',
             'Patch': '🎖️',
             'Collectible': '⭐',
             'Music Kit': '🎵',
+            'Key': '🔑',
             'Tool': '🔧',
+            'Graffiti': '🎨',
+            'Keychain': '🔗',
         };
         return map[type] || '📦';
     }
@@ -382,7 +489,7 @@
         const totalSpent = investments.reduce((sum, inv) => sum + calcTotalSpent(inv), 0);
 
         totalValueEl.textContent = totalQty + ' szt.';
-        totalCostEl.textContent = '$' + totalSpent.toFixed(2);
+        totalCostEl.textContent = formatPrice(totalSpent);
     }
 
     // ===== Modal: Show Tranches =====
@@ -411,11 +518,15 @@
                             </div>
                             <div class="tranche-field">
                                 <span class="field-label">Cena/szt.</span>
-                                <span class="field-value">$${t.pricePerUnit.toFixed(2)}</span>
+                                <span class="field-value">${formatTranchePrice(t)}</span>
                             </div>
                             <div class="tranche-field">
                                 <span class="field-label">Łączny koszt</span>
-                                <span class="field-value">$${(t.quantity * t.pricePerUnit).toFixed(2)}</span>
+                                <span class="field-value">${formatTrancheCost(t)}</span>
+                            </div>
+                            <div class="tranche-field">
+                                <span class="field-label">Waluta</span>
+                                <span class="field-value">${t.currency || 'USD'}</span>
                             </div>
                             <div class="tranche-field">
                                 <span class="field-label">Data</span>
@@ -436,9 +547,9 @@
             <div class="summary-row">
                 <div>
                     <div class="summary-label">Łączna ilość: ${totalQty} szt.</div>
-                    <div class="summary-label">Łączny koszt: $${totalSpent.toFixed(2)}</div>
+                    <div class="summary-label">Łączny koszt (${currentCurrency}): ${formatPrice(totalSpent)}</div>
                 </div>
-                <div class="summary-value">Śr. cena: $${avgPrice.toFixed(2)}</div>
+                <div class="summary-value">Śr. cena: ${formatPrice(avgPrice)}</div>
             </div>
         `;
 

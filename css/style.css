@@ -88,6 +88,33 @@ body {
     color: var(--text-primary);
 }
 
+/* Currency Select */
+.stat-currency {
+    align-items: flex-end;
+}
+
+.currency-select {
+    padding: 4px 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-family: inherit;
+    cursor: pointer;
+    outline: none;
+    transition: border-color var(--transition);
+}
+
+.currency-select:focus {
+    border-color: var(--accent);
+}
+
+.currency-select option {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
 /* ===== Main ===== */
 .main {
     max-width: 1400px;
@@ -220,7 +247,7 @@ body {
 }
 
 .autocomplete-item {
-    padding: 10px 14px;
+    padding: 8px 14px;
     cursor: pointer;
     font-size: 0.85rem;
     color: var(--text-primary);
@@ -238,6 +265,28 @@ body {
 .autocomplete-item:hover,
 .autocomplete-item.selected {
     background: var(--bg-hover);
+}
+
+/* Autocomplete images */
+.ac-img {
+    width: 48px;
+    height: 36px;
+    object-fit: contain;
+    flex-shrink: 0;
+    border-radius: 4px;
+    background: var(--bg-primary);
+}
+
+.ac-img-placeholder {
+    width: 48px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    font-size: 1.1rem;
 }
 
 .autocomplete-item .item-type {
@@ -400,8 +449,8 @@ body {
 }
 
 .item-cell .item-icon {
-    width: 40px;
-    height: 40px;
+    width: 48px;
+    height: 48px;
     background: var(--bg-tertiary);
     border-radius: var(--radius);
     display: flex;
@@ -413,6 +462,12 @@ body {
     text-align: center;
     line-height: 1.1;
     overflow: hidden;
+}
+
+.item-icon-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 .item-cell .item-info .item-name {
@@ -648,6 +703,7 @@ body {
 
     .stats-bar {
         gap: 16px;
+        flex-wrap: wrap;
     }
 
     .stat {
@@ -683,4 +739,21 @@ body {
     .item-cell {
         min-width: 180px;
     }
+}
+
+/* ===== DB Status Indicator ===== */
+.db-status {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    padding: 6px 0 2px;
+    display: none;
+    transition: opacity var(--transition);
+}
+
+.db-status.visible {
+    display: block;
+}
+
+.db-status.done {
+    color: var(--green);
 }
