@@ -216,15 +216,28 @@ const CS2Database = (function () {
     // ===== Search =====
     function search(query, limit = 50) {
         if (!query || query.length < 1) return [];
-        const q = query.toLowerCase();
-        const results = [];
+        const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+        if (words.length === 0) return [];
+
+        const exact = [];
+        const allWords = [];
+
         for (const item of items) {
-            if (item.name.toLowerCase().includes(q)) {
-                results.push(item);
-                if (results.length >= limit) break;
+            const name = item.name.toLowerCase();
+            // Exact substring match (highest priority)
+            if (name.includes(words.join(' '))) {
+                exact.push(item);
+                if (exact.length >= limit) break;
+                continue;
+            }
+            // All words present anywhere in name (flexible match)
+            if (words.every(w => name.includes(w))) {
+                allWords.push(item);
             }
         }
-        return results;
+
+        const combined = exact.concat(allWords);
+        return combined.slice(0, limit);
     }
 
     function findByName(name) {
