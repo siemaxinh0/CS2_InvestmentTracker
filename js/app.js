@@ -15,6 +15,16 @@
     const CURRENCY_KEY = 'cs2_currency';
     let currentCurrency = localStorage.getItem(CURRENCY_KEY) || 'USD';
 
+    // Platform selling fees (percentage)
+    const PLATFORM_FEES = {
+        'Steam Market': 0.15,  // 15% (5% Steam + 10% CS2 game fee)
+        'CSFloat': 0.02,       // 2%
+    };
+
+    function getFeePercent(platform) {
+        return PLATFORM_FEES[platform] || 0;
+    }
+
     function getCurrency() {
         return CURRENCIES[currentCurrency] || CURRENCIES.USD;
     }
@@ -22,6 +32,52 @@
     function formatPrice(amountInUserCurrency) {
         const cur = getCurrency();
         return cur.symbol + amountInUserCurrency.toFixed(2);
+    }
+
+    // ===== Exchange Rates =====
+    const EXCHANGE_RATES_KEY = 'cs2_exchange_rates';
+    const EXCHANGE_RATES_TTL = 60 * 60 * 1000; // 1 hour
+    let exchangeRates = loadExchangeRates();
+
+    function loadExchangeRates() {
+        try {
+            const raw = localStorage.getItem(EXCHANGE_RATES_KEY);
+            if (!raw) return { rates: { USD: 1, PLN: 4.05, EUR: 0.92, CNY: 7.24 }, ts: 0 };
+            const data = JSON.parse(raw);
+            if (data && data.rates) return data;
+        } catch {}
+        return { rates: { USD: 1, PLN: 4.05, EUR: 0.92, CNY: 7.24 }, ts: 0 };
+    }
+
+    function saveExchangeRates() {
+        try {
+            localStorage.setItem(EXCHANGE_RATES_KEY, JSON.stringify(exchangeRates));
+        } catch {}
+    }
+
+    async function fetchExchangeRates() {
+        if (Date.now() - exchangeRates.ts < EXCHANGE_RATES_TTL) return;
+        try {
+            const res = await fetch('https://open.er-api.com/v6/latest/USD', { signal: AbortSignal.timeout(5000) });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data && data.rates) {
+                exchangeRates = {
+                    rates: {
+                        USD: 1,
+                        PLN: data.rates.PLN || 4.05,
+                        EUR: data.rates.EUR || 0.92,
+                        CNY: data.rates.CNY || 7.24,
+                    },
+                    ts: Date.now(),
+                };
+                saveExchangeRates();
+            }
+        } catch {}
+    }
+
+    function getRate(currency) {
+        return exchangeRates.rates[currency] || 1;
     }
 
     // ===== Live Price State =====
@@ -54,18 +110,19 @@
         }
     }
 
-    // Always fetches in USD, then converts client-side
-    async function fetchSteamPriceUSD(itemName) {
+    // Fetches Steam price in user's current currency (Steam does its own conversion)
+    async function fetchSteamPrice(itemName) {
         try {
-            const url = `${PROXY_BASE}/api/steam-price?market_hash_name=${encodeURIComponent(itemName)}&currency=USD`;
+            const url = `${PROXY_BASE}/api/steam-price?market_hash_name=${encodeURIComponent(itemName)}&currency=${currentCurrency}`;
             const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
             if (!res.ok) return null;
             const data = await res.json();
             if (data && data.success) {
-                const raw = data.median_price || data.lowest_price || '';
+                const raw = data.lowest_price || data.median_price || '';
+                // Remove currency symbols, handle comma as decimal (Steam PLN: "166,98z\u0142")
                 const numStr = raw.replace(/[^0-9.,]/g, '').replace(',', '.');
                 const price = parseFloat(numStr);
-                if (!isNaN(price) && price > 0) return price;
+                if (!isNaN(price) && price > 0) return { price, currency: currentCurrency };
             }
             return null;
         } catch { return null; }
@@ -91,24 +148,38 @@
         return platform === 'CSFloat' ? 'csfloat' : 'steam';
     }
 
-    // Cache stores { priceUSD, source, ts } under key "itemName|steam" or "itemName|csfloat"
+    // Cache stores { price, priceCurrency, source, ts } under key "itemName|source"
     async function fetchLivePrice(itemName, source) {
         const cacheKey = itemName + '|' + source;
         const cached = priceCache[cacheKey];
-        if (cached && Date.now() - cached.ts < PRICE_CACHE_TTL) {
+        // Invalidate cache if currency changed (Steam prices are currency-specific)
+        if (cached && Date.now() - cached.ts < PRICE_CACHE_TTL && cached.priceCurrency === currentCurrency) {
             return cached;
         }
         if (!proxyOnline) return null;
 
-        let priceUSD = null;
+        let price = null;
+        let priceCurrency = currentCurrency;
+        let actualSource = source;
+
         if (source === 'csfloat') {
-            priceUSD = await fetchCSFloatPriceUSD(itemName);
+            const usd = await fetchCSFloatPriceUSD(itemName);
+            if (usd !== null) {
+                // Convert from USD to user's currency
+                price = convertCurrency(usd, 'USD', currentCurrency);
+                actualSource = 'csfloat';
+            }
         } else {
-            priceUSD = await fetchSteamPriceUSD(itemName);
+            const result = await fetchSteamPrice(itemName);
+            if (result !== null) {
+                price = result.price;
+                priceCurrency = result.currency;
+                actualSource = 'steam';
+            }
         }
 
-        if (priceUSD !== null) {
-            const entry = { priceUSD, source, ts: Date.now() };
+        if (price !== null) {
+            const entry = { price, priceCurrency, source: actualSource, ts: Date.now() };
             priceCache[cacheKey] = entry;
             savePriceCache();
             return entry;
@@ -119,6 +190,14 @@
     async function refreshAllPrices() {
         await checkProxy();
         if (!proxyOnline) return;
+
+        // Fetch live exchange rates
+        await fetchExchangeRates();
+
+        // Clear price cache so we fetch fresh data
+        priceCache = {};
+        savePriceCache();
+
         // Deduplicate by (item name, source) pair
         const seen = new Set();
         const pairs = [];
@@ -144,8 +223,11 @@
         const cacheKey = itemName + '|' + source;
         const cached = priceCache[cacheKey];
         if (cached && Date.now() - cached.ts < PRICE_CACHE_TTL) {
-            const priceConverted = convertCurrency(cached.priceUSD, 'USD', currentCurrency);
-            return { price: priceConverted, source: cached.source };
+            // Price is already in user's currency (Steam fetched natively, CSFloat converted)
+            const price = cached.priceCurrency === currentCurrency
+                ? cached.price
+                : convertCurrency(cached.price, cached.priceCurrency, currentCurrency);
+            return { price, source: cached.source };
         }
         return null;
     }
@@ -183,6 +265,7 @@
     const totalInvestmentsEl = document.getElementById('totalInvestments');
     const totalValueEl = document.getElementById('totalValue');
     const totalCostEl = document.getElementById('totalCost');
+    const totalPLEl = document.getElementById('totalPL');
 
     // ===== Persistence =====
     function loadInvestments() {
@@ -289,6 +372,9 @@
         // Set today's date as default
         dateInput.value = new Date().toISOString().split('T')[0];
 
+        // Fetch live exchange rates (non-blocking)
+        fetchExchangeRates();
+
         // Restore currency
         currencySelect.value = currentCurrency;
 
@@ -311,6 +397,9 @@
         currencySelect.addEventListener('change', () => {
             currentCurrency = currencySelect.value;
             localStorage.setItem(CURRENCY_KEY, currentCurrency);
+            // Clear price cache — Steam prices are currency-specific
+            priceCache = {};
+            savePriceCache();
             applyI18n();
             renderTable();
             updateStats();
@@ -543,10 +632,32 @@
 
     function convertCurrency(amount, fromCurrency, toCurrency) {
         if (fromCurrency === toCurrency) return amount;
-        const fromRate = (CURRENCIES[fromCurrency] || CURRENCIES.USD).rate;
-        const toRate = (CURRENCIES[toCurrency] || CURRENCIES.USD).rate;
+        const fromRate = getRate(fromCurrency);
+        const toRate = getRate(toCurrency);
         const usdAmount = amount / fromRate;
         return usdAmount * toRate;
+    }
+
+    function calcSoldQuantity(investment) {
+        if (!investment.sales) return 0;
+        return investment.sales.reduce((sum, s) => sum + s.quantity, 0);
+    }
+
+    function calcHeldQuantity(investment) {
+        return calcTotalQuantity(investment) - calcSoldQuantity(investment);
+    }
+
+    function calcRealizedPL(investment) {
+        if (!investment.sales || investment.sales.length === 0) return 0;
+        const avgCost = calcAvgPrice(investment);
+        return investment.sales.reduce((sum, sale) => {
+            const saleRevenue = sale.quantity * sale.pricePerUnit;
+            const revenueInCur = convertCurrency(saleRevenue, sale.currency || 'USD', currentCurrency);
+            const fee = revenueInCur * (sale.feePercent || 0);
+            const net = revenueInCur - fee;
+            const costBasis = avgCost * sale.quantity;
+            return sum + (net - costBasis);
+        }, 0);
     }
 
     function formatTrancheCost(tranche) {
@@ -611,23 +722,43 @@
                 ? `<img class="item-icon-img" src="${escapeAttr(imgUrl)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='${getTypeEmoji(inv.type)}';">`
                 : getTypeEmoji(inv.type);
 
+            // Held/sold quantities & fees
+            const heldQty = calcHeldQuantity(inv);
+            const soldQty = calcSoldQuantity(inv);
+            const feePercent = getFeePercent(invPlatform);
+            const realizedPL = calcRealizedPL(inv);
+
             // Live price & P/L
             const priceData = getCachedPrice(inv.name, invPlatform);
             let livePriceHtml, plHtml;
             if (priceData !== null) {
-                const srcLabel = priceData.source === 'csfloat' ? t('priceSrcCSFloat') : t('priceSrcSteam');
-                const srcClass = priceData.source === 'csfloat' ? 'price-source price-source-csfloat' : 'price-source price-source-steam';
+                const srcLabel = priceData.source === 'csfloat' ? t('priceSrcCSFloat')
+                    : t('priceSrcSteam');
+                const srcClass = priceData.source === 'csfloat' ? 'price-source price-source-csfloat'
+                    : 'price-source price-source-steam';
                 const srcTag = `<span class="${srcClass}">${escapeHtml(srcLabel)}</span>`;
-                livePriceHtml = `<span class="live-price">${formatPrice(priceData.price)}</span>${srcTag}`;
-                const totalValue = priceData.price * totalQty;
-                const pl = totalValue - totalSpent;
+                const feeTag = feePercent > 0 ? `<span class="price-fee">${Math.round(feePercent * 100)}% ${t('feeLabel')}</span>` : '';
+                livePriceHtml = `<span class="live-price">${formatPrice(priceData.price)}</span>${srcTag}${feeTag}`;
+                const netLivePrice = priceData.price * (1 - feePercent);
+                const unrealizedPL = (netLivePrice * heldQty) - (avgPrice * heldQty);
+                const pl = unrealizedPL + realizedPL;
                 const plPct = totalSpent > 0 ? ((pl / totalSpent) * 100).toFixed(1) : '0.0';
                 const plClass = pl >= 0 ? 'pl-positive' : 'pl-negative';
                 plHtml = `<span class="${plClass}">${pl >= 0 ? '+' : ''}${formatPrice(pl)} (${pl >= 0 ? '+' : ''}${plPct}%)</span>`;
             } else {
                 livePriceHtml = `<span class="live-price-na">${t('priceNotAvailable')}</span>`;
-                plHtml = `<span class="live-price-na">${t('priceNotAvailable')}</span>`;
+                if (realizedPL !== 0) {
+                    const plClass = realizedPL >= 0 ? 'pl-positive' : 'pl-negative';
+                    plHtml = `<span class="${plClass}">${realizedPL >= 0 ? '+' : ''}${formatPrice(realizedPL)}</span>`;
+                } else {
+                    plHtml = `<span class="live-price-na">${t('priceNotAvailable')}</span>`;
+                }
             }
+
+            // Quantity display
+            const qtyHtml = soldQty > 0
+                ? `${heldQty} <span class="qty-detail">/ ${totalQty}</span>`
+                : `${totalQty}`;
 
             return `<tr data-id="${inv.id}">
                 <td>
@@ -639,7 +770,7 @@
                         </div>
                     </div>
                 </td>
-                <td>${totalQty}</td>
+                <td>${qtyHtml}</td>
                 <td>${formatPrice(avgPrice)}</td>
                 <td>${formatPrice(totalSpent)}</td>
                 <td>${livePriceHtml}</td>
@@ -653,6 +784,7 @@
                 <td>
                     <div class="actions-cell">
                         <button class="btn btn-sm btn-ghost" onclick="window.app.addTranche('${inv.id}')" title="+">+</button>
+                        ${heldQty > 0 ? `<button class="btn btn-sm btn-sell" onclick="window.app.sellInvestment('${inv.id}')" title="${t('sellTitle')}">💰</button>` : ''}
                         <button class="btn btn-sm btn-danger" onclick="window.app.deleteInvestment('${inv.id}')" title="✕">✕</button>
                     </div>
                 </td>
@@ -739,6 +871,32 @@
 
         totalValueEl.textContent = totalQty + ' ' + t('unitPcs');
         totalCostEl.textContent = formatPrice(totalSpent);
+
+        // Total P/L (realized + unrealized after fees)
+        let totalPL = 0;
+        let hasAnyData = false;
+        for (const inv of investments) {
+            const invPlatform = inv.platform || (inv.tranches[0] ? inv.tranches[0].platform : '');
+            const feePercent = getFeePercent(invPlatform);
+            const heldQty = calcHeldQuantity(inv);
+            const avgCost = calcAvgPrice(inv);
+            const priceData = getCachedPrice(inv.name, invPlatform);
+            const rpl = calcRealizedPL(inv);
+            if (rpl !== 0) hasAnyData = true;
+            totalPL += rpl;
+            if (priceData !== null) {
+                hasAnyData = true;
+                const netLivePrice = priceData.price * (1 - feePercent);
+                totalPL += (netLivePrice * heldQty) - (avgCost * heldQty);
+            }
+        }
+        if (hasAnyData) {
+            totalPLEl.textContent = (totalPL >= 0 ? '+' : '') + formatPrice(totalPL);
+            totalPLEl.className = 'stat-value ' + (totalPL >= 0 ? 'stat-pl-positive' : 'stat-pl-negative');
+        } else {
+            totalPLEl.textContent = '—';
+            totalPLEl.className = 'stat-value';
+        }
     }
 
     // ===== Modal: Show Tranches =====
@@ -796,11 +954,25 @@
             </div>
             <div class="summary-row">
                 <div>
-                    <div class="summary-label">${t('summaryTotalQty')}: ${totalQty} ${t('unitPcs')}</div>
+                    <div class="summary-label">${t('summaryTotalQty')}: ${totalQty} ${t('unitPcs')}${calcSoldQuantity(inv) > 0 ? ` (${t('soldQty')}: ${calcSoldQuantity(inv)})` : ''}</div>
                     <div class="summary-label">${t('summaryTotalCost')} (${currentCurrency}): ${formatPrice(totalSpent)}</div>
                 </div>
                 <div class="summary-value">${t('summaryAvgPrice')}: ${formatPrice(avgPrice)}</div>
             </div>
+            ${inv.sales && inv.sales.length > 0 ? `
+            <div class="sales-history">
+                <h4>${t('sellHistory')}</h4>
+                ${inv.sales.map(sale => `
+                    <div class="sale-card">
+                        <div class="sale-info">
+                            <span>${sale.quantity} × ${(CURRENCIES[sale.currency] || CURRENCIES.USD).symbol}${sale.pricePerUnit.toFixed(2)}</span>
+                            <span class="sale-fee">-${Math.round((sale.feePercent || 0) * 100)}% ${t('feeLabel')}</span>
+                            <span class="sale-date">${sale.date}</span>
+                        </div>
+                        <button class="btn btn-sm btn-danger" onclick="window.app.deleteSale('${inv.id}', '${sale.id}')">${t('btnDelete')}</button>
+                    </div>
+                `).join('')}
+            </div>` : ''}
         `;
 
         openModal();
@@ -875,12 +1047,112 @@
         return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
+    // ===== Sell Investment =====
+    function sellInvestment(investmentId) {
+        const inv = investments.find(i => i.id === investmentId);
+        if (!inv) return;
+
+        const invPlatform = inv.platform || (inv.tranches[0] ? inv.tranches[0].platform : '');
+        const heldQty = calcHeldQuantity(inv);
+        const feePercent = getFeePercent(invPlatform);
+        if (heldQty <= 0) return;
+
+        const today = new Date().toISOString().split('T')[0];
+        modalTitle.textContent = t('sellTitle') + ' — ' + inv.name;
+        modalBody.innerHTML = `
+            <div class="sell-form">
+                <div class="sell-form-row">
+                    <label>${t('sellQuantity')} (max: ${heldQty})</label>
+                    <input type="number" id="sellQty" min="1" max="${heldQty}" value="1">
+                </div>
+                <div class="sell-form-row">
+                    <label>${t('sellPricePerUnit')} (${getCurrency().symbol})</label>
+                    <input type="number" id="sellPrice" step="0.01" min="0.01" placeholder="0.00">
+                </div>
+                <div class="sell-form-row">
+                    <label>${t('sellDate')}</label>
+                    <input type="date" id="sellDate" value="${today}">
+                </div>
+                <div class="sell-info">
+                    <div class="sell-info-row">
+                        <span>${t('labelPlatform')}</span>
+                        <span>${escapeHtml(invPlatform)}</span>
+                    </div>
+                    <div class="sell-info-row">
+                        <span>${t('sellFee')}</span>
+                        <span>${Math.round(feePercent * 100)}%</span>
+                    </div>
+                    <div class="sell-info-row sell-net-row">
+                        <span>${t('sellNetProceeds')}</span>
+                        <span id="sellNetValue">—</span>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-primary btn-sell-confirm" id="btnConfirmSell">${t('sellConfirm')}</button>
+            </div>
+        `;
+
+        const updateNet = () => {
+            const qty = parseInt(document.getElementById('sellQty').value) || 0;
+            const price = parseFloat(document.getElementById('sellPrice').value) || 0;
+            const gross = qty * price;
+            const net = gross * (1 - feePercent);
+            document.getElementById('sellNetValue').textContent = formatPrice(net);
+        };
+        document.getElementById('sellQty').addEventListener('input', updateNet);
+        document.getElementById('sellPrice').addEventListener('input', updateNet);
+        document.getElementById('btnConfirmSell').addEventListener('click', () => confirmSell(investmentId));
+        openModal();
+    }
+
+    function confirmSell(investmentId) {
+        const inv = investments.find(i => i.id === investmentId);
+        if (!inv) return;
+
+        const qty = parseInt(document.getElementById('sellQty').value);
+        const price = parseFloat(document.getElementById('sellPrice').value);
+        const date = document.getElementById('sellDate').value;
+        const invPlatform = inv.platform || (inv.tranches[0] ? inv.tranches[0].platform : '');
+        const feePercent = getFeePercent(invPlatform);
+
+        if (!qty || qty <= 0 || !price || price <= 0) return;
+        if (qty > calcHeldQuantity(inv)) return;
+
+        if (!inv.sales) inv.sales = [];
+        inv.sales.push({
+            id: generateId(),
+            quantity: qty,
+            pricePerUnit: price,
+            currency: currentCurrency,
+            date: date || new Date().toISOString().split('T')[0],
+            feePercent: feePercent,
+            platform: invPlatform,
+        });
+
+        saveInvestments();
+        closeModal();
+        renderTable();
+        updateStats();
+    }
+
+    function deleteSale(investmentId, saleId) {
+        const inv = investments.find(i => i.id === investmentId);
+        if (!inv || !inv.sales) return;
+        if (!confirm(t('sellDeleteConfirm'))) return;
+        inv.sales = inv.sales.filter(s => s.id !== saleId);
+        saveInvestments();
+        renderTable();
+        updateStats();
+        showTranches(investmentId);
+    }
+
     // ===== Public API (for onclick handlers in HTML) =====
     window.app = {
         showTranches,
         addTranche,
         deleteInvestment,
-        deleteTranche
+        deleteTranche,
+        sellInvestment,
+        deleteSale
     };
 
     // ===== Start =====

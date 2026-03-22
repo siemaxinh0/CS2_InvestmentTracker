@@ -80,6 +80,20 @@ const I18N = (function () {
             refreshPrices: 'Odśwież ceny',
             priceSrcSteam: 'Steam',
             priceSrcCSFloat: 'CSFloat',
+
+            // Fees & Selling
+            statTotalPL: 'Łączny Z/S',
+            feeLabel: 'prowizja',
+            sellTitle: 'Sprzedaj',
+            sellQuantity: 'Ilość do sprzedaży',
+            sellPricePerUnit: 'Cena sprzedaży za szt.',
+            sellDate: 'Data sprzedaży',
+            sellFee: 'Prowizja platformy',
+            sellNetProceeds: 'Otrzymasz po prowizji',
+            sellConfirm: 'Potwierdź sprzedaż',
+            sellHistory: 'Sprzedaże',
+            soldQty: 'Sprzedano',
+            sellDeleteConfirm: 'Usunąć ten wpis sprzedaży?',
         },
 
         en: {
@@ -156,6 +170,20 @@ const I18N = (function () {
             refreshPrices: 'Refresh prices',
             priceSrcSteam: 'Steam',
             priceSrcCSFloat: 'CSFloat',
+
+            // Fees & Selling
+            statTotalPL: 'Total P/L',
+            feeLabel: 'fee',
+            sellTitle: 'Sell',
+            sellQuantity: 'Quantity to sell',
+            sellPricePerUnit: 'Sell price per unit',
+            sellDate: 'Sale date',
+            sellFee: 'Platform fee',
+            sellNetProceeds: 'Net proceeds',
+            sellConfirm: 'Confirm sale',
+            sellHistory: 'Sales',
+            soldQty: 'Sold',
+            sellDeleteConfirm: 'Delete this sale record?',
         }
     };
 
