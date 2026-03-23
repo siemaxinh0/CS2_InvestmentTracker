@@ -1214,6 +1214,30 @@ body {
     }
 }
 
+/* ===== GitHub Link ===== */
+.github-link {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    transition: var(--transition);
+    z-index: 50;
+}
+
+.github-link:hover {
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+    transform: scale(1.1);
+}
+
 /* ===== Selection ===== */
 ::selection {
     background: var(--accent-dim);
