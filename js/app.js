@@ -263,7 +263,6 @@
 
     // Stats
     const totalInvestmentsEl = document.getElementById('totalInvestments');
-    const totalValueEl = document.getElementById('totalValue');
     const totalCostEl = document.getElementById('totalCost');
     const totalPLEl = document.getElementById('totalPL');
 
@@ -290,67 +289,6 @@
         pl: 'https://flagcdn.com/w40/pl.png',
         en: 'https://flagcdn.com/w40/gb.png',
     };
-
-    // Custom dropdown with flag images inside each option
-    function buildFlagSelect(selectEl, flagMap) {
-        const parent = selectEl.parentNode;
-        const container = document.createElement('div');
-        container.className = 'flag-dropdown';
-
-        const selected = document.createElement('div');
-        selected.className = 'flag-dropdown-selected';
-        container.appendChild(selected);
-
-        const optionsList = document.createElement('div');
-        optionsList.className = 'flag-dropdown-options';
-        container.appendChild(optionsList);
-
-        function renderOptions() {
-            optionsList.innerHTML = '';
-            Array.from(selectEl.options).forEach(opt => {
-                const item = document.createElement('div');
-                item.className = 'flag-dropdown-option' + (opt.value === selectEl.value ? ' active' : '');
-                item.dataset.value = opt.value;
-                const flagUrl = flagMap[opt.value];
-                item.innerHTML = (flagUrl ? `<img class="flag-dropdown-flag" src="${flagUrl}" alt="">` : '') +
-                    `<span>${opt.textContent}</span>`;
-                item.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    selectEl.value = opt.value;
-                    selectEl.dispatchEvent(new Event('change'));
-                    updateSelected();
-                    optionsList.classList.remove('open');
-                });
-                optionsList.appendChild(item);
-            });
-        }
-
-        function updateSelected() {
-            const opt = selectEl.options[selectEl.selectedIndex];
-            const flagUrl = flagMap[selectEl.value];
-            selected.innerHTML = (flagUrl ? `<img class="flag-dropdown-flag" src="${flagUrl}" alt="">` : '') +
-                `<span>${opt ? opt.textContent : ''}</span><span class="flag-dropdown-arrow">▾</span>`;
-            renderOptions();
-        }
-
-        selected.addEventListener('click', (e) => {
-            e.stopPropagation();
-            // Close all other open dropdowns
-            document.querySelectorAll('.flag-dropdown-options.open').forEach(el => {
-                if (el !== optionsList) el.classList.remove('open');
-            });
-            optionsList.classList.toggle('open');
-        });
-
-        document.addEventListener('click', () => optionsList.classList.remove('open'));
-
-        selectEl.style.display = 'none';
-        parent.insertBefore(container, selectEl.nextSibling);
-        updateSelected();
-
-        // Update on external changes
-        selectEl.addEventListener('change', updateSelected);
-    }
 
     // ===== i18n: Apply translations to DOM =====
     function applyI18n() {
@@ -413,8 +351,7 @@
         });
 
         // Build flag+select wrappers
-        buildFlagSelect(currencySelect, FLAG_URLS);
-        buildFlagSelect(langSelect, FLAG_URLS);
+        // (plain selects now — no custom flag dropdowns)
 
         filterSearch.addEventListener('input', renderTable);
         filterPlatform.addEventListener('change', renderTable);
@@ -874,7 +811,6 @@
             return sum + (avg * held);
         }, 0);
 
-        totalValueEl.textContent = totalQty + ' ' + t('unitPcs');
         totalCostEl.textContent = formatPrice(totalSpent);
 
         // Total P/L (realized + unrealized after fees)

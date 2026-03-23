@@ -41,24 +41,17 @@
                 </div>
             </div>
             <div class="header-controls">
-                <div class="header-selects">
-                    <div class="stat stat-currency">
-                        <span class="stat-label" data-i18n="statCurrency">Waluta</span>
-                        <select id="currencySelect" class="currency-select">
-                            <option value="USD">USD ($)</option>
-                            <option value="PLN">PLN (zł)</option>
-                            <option value="EUR">EUR (€)</option>
-                            <option value="CNY">CNY (¥)</option>
-                        </select>
-                    </div>
-                    <div class="stat stat-lang">
-                        <span class="stat-label" data-i18n="statLanguage">Język</span>
-                        <select id="langSelect" class="lang-select">
-                            <option value="pl">PL</option>
-                            <option value="en">EN</option>
-                        </select>
-                    </div>
-                </div>
+                <select id="currencySelect" class="header-select">
+                    <option value="USD">USD ($)</option>
+                    <option value="PLN">PLN (zł)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="CNY">CNY (¥)</option>
+                </select>
+                <span class="header-divider"></span>
+                <select id="langSelect" class="header-select header-select-sm">
+                    <option value="pl">PL</option>
+                    <option value="en">EN</option>
+                </select>
             </div>
         </header>
 
@@ -78,10 +71,6 @@
                     <div class="stat">
                         <span class="stat-label" data-i18n="statInvestments">Inwestycje</span>
                         <span class="stat-value" id="totalInvestments">0</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-label" data-i18n="statTotalQty">Łączna ilość</span>
-                        <span class="stat-value" id="totalValue">0 szt.</span>
                     </div>
                     <div class="stat">
                         <span class="stat-label" data-i18n="statTotalCost">Łączny koszt</span>
