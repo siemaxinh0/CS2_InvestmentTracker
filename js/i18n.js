@@ -81,6 +81,32 @@ const I18N = (function () {
             priceSrcSteam: 'Steam',
             priceSrcCSFloat: 'CSFloat',
 
+            // Tabs
+            tabPortfolio: 'Portfel',
+            tabHistory: 'Historia transakcji',
+
+            // History
+            historyTitle: 'Zrealizowane transakcje',
+            historyEmpty: 'Brak zrealizowanych transakcji',
+            historyEmptyDesc: 'Sprzedaj przedmioty z portfela, aby zobaczyć historię',
+            historyItem: 'Przedmiot',
+            historyQty: 'Ilość',
+            historyBuyPrice: 'Cena zakupu',
+            historySellPrice: 'Cena sprzedaży',
+            historyFee: 'Prowizja',
+            historyNet: 'Netto',
+            historyPL: 'Z/S',
+            historyDate: 'Data',
+            historyPlatform: 'Platforma',
+            historySummary: 'Podsumowanie',
+            historyTotalSales: 'Łączna sprzedaż (brutto)',
+            historyTotalFees: 'Łączne prowizje',
+            historyTotalNet: 'Łączna sprzedaż (netto)',
+            historyTotalCost: 'Łączny koszt zakupu',
+            historyTotalPL: 'Zrealizowany Z/S',
+            historyChartTitle: 'Skumulowany zysk/strata w czasie',
+            historyTransactions: 'transakcji',
+
             // Fees & Selling
             statTotalPL: 'Łączny Z/S',
             feeLabel: 'prowizja',
@@ -170,6 +196,32 @@ const I18N = (function () {
             refreshPrices: 'Refresh prices',
             priceSrcSteam: 'Steam',
             priceSrcCSFloat: 'CSFloat',
+
+            // Tabs
+            tabPortfolio: 'Portfolio',
+            tabHistory: 'Transaction History',
+
+            // History
+            historyTitle: 'Completed Transactions',
+            historyEmpty: 'No completed transactions',
+            historyEmptyDesc: 'Sell items from your portfolio to see history',
+            historyItem: 'Item',
+            historyQty: 'Qty',
+            historyBuyPrice: 'Buy Price',
+            historySellPrice: 'Sell Price',
+            historyFee: 'Fee',
+            historyNet: 'Net',
+            historyPL: 'P/L',
+            historyDate: 'Date',
+            historyPlatform: 'Platform',
+            historySummary: 'Summary',
+            historyTotalSales: 'Total sales (gross)',
+            historyTotalFees: 'Total fees',
+            historyTotalNet: 'Total sales (net)',
+            historyTotalCost: 'Total cost basis',
+            historyTotalPL: 'Realized P/L',
+            historyChartTitle: 'Cumulative P/L over time',
+            historyTransactions: 'transactions',
 
             // Fees & Selling
             statTotalPL: 'Total P/L',

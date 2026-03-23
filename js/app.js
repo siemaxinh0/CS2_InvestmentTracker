@@ -1132,6 +1132,7 @@
         closeModal();
         renderTable();
         updateStats();
+        if (document.getElementById('tabHistory').classList.contains('active')) renderHistoryTab();
     }
 
     function deleteSale(investmentId, saleId) {
@@ -1142,6 +1143,7 @@
         saveInvestments();
         renderTable();
         updateStats();
+        if (document.getElementById('tabHistory').classList.contains('active')) renderHistoryTab();
         showTranches(investmentId);
     }
 
@@ -1155,6 +1157,289 @@
         deleteSale
     };
 
+    // ===== History Tab =====
+    function getAllSalesFlat() {
+        const sales = [];
+        for (const inv of investments) {
+            if (!inv.sales || inv.sales.length === 0) continue;
+            const avgCost = calcAvgPrice(inv);
+            for (const sale of inv.sales) {
+                const gross = sale.quantity * sale.pricePerUnit;
+                const grossInCur = convertCurrency(gross, sale.currency || 'USD', currentCurrency);
+                const fee = grossInCur * (sale.feePercent || 0);
+                const net = grossInCur - fee;
+                const costBasis = avgCost * sale.quantity;
+                const pl = net - costBasis;
+                sales.push({
+                    date: sale.date,
+                    itemName: inv.name,
+                    image: inv.image,
+                    type: inv.type,
+                    quantity: sale.quantity,
+                    avgBuyPrice: avgCost,
+                    sellPrice: convertCurrency(sale.pricePerUnit, sale.currency || 'USD', currentCurrency),
+                    grossInCur,
+                    fee,
+                    net,
+                    costBasis,
+                    pl,
+                    platform: sale.platform || inv.platform || '',
+                    feePercent: sale.feePercent || 0,
+                });
+            }
+        }
+        sales.sort((a, b) => b.date.localeCompare(a.date));
+        return sales;
+    }
+
+    function renderHistoryTab() {
+        const histBody = document.getElementById('historyTableBody');
+        const histEmpty = document.getElementById('historyEmptyState');
+        const chartEmpty = document.getElementById('chartEmpty');
+        if (!histBody) return;
+
+        const sales = getAllSalesFlat();
+
+        // Stats
+        const histCount = document.getElementById('histTotalCount');
+        const histNet = document.getElementById('histTotalNet');
+        const histFees = document.getElementById('histTotalFees');
+        const histPL = document.getElementById('histTotalPL');
+
+        if (sales.length === 0) {
+            histBody.innerHTML = '';
+            histEmpty.style.display = 'flex';
+            chartEmpty.classList.remove('hidden');
+            histCount.textContent = '0';
+            histNet.textContent = formatPrice(0);
+            histFees.textContent = formatPrice(0);
+            histPL.textContent = '—';
+            histPL.className = 'stat-value';
+            drawPLChart([]);
+            return;
+        }
+
+        histEmpty.style.display = 'none';
+        chartEmpty.classList.add('hidden');
+
+        // Compute totals
+        let totalGross = 0, totalFees = 0, totalNet = 0, totalCost = 0, totalPL = 0;
+        for (const s of sales) {
+            totalGross += s.grossInCur;
+            totalFees += s.fee;
+            totalNet += s.net;
+            totalCost += s.costBasis;
+            totalPL += s.pl;
+        }
+
+        histCount.textContent = sales.length;
+        histNet.textContent = formatPrice(totalNet);
+        histFees.textContent = formatPrice(totalFees);
+        histPL.textContent = (totalPL >= 0 ? '+' : '') + formatPrice(totalPL);
+        histPL.className = 'stat-value ' + (totalPL >= 0 ? 'stat-pl-positive' : 'stat-pl-negative');
+
+        // Table rows
+        histBody.innerHTML = sales.map(s => {
+            const plClass = s.pl >= 0 ? 'pl-positive' : 'pl-negative';
+            const iconHtml = s.image
+                ? `<img src="${escapeAttr(s.image)}" alt="" loading="lazy" style="width:32px;height:32px;object-fit:contain;">`
+                : getTypeEmoji(s.type);
+            return `<tr>
+                <td>${escapeHtml(s.date)}</td>
+                <td><div class="hist-item-cell"><div class="hist-item-icon">${iconHtml}</div><span class="hist-item-name">${escapeHtml(s.itemName)}</span></div></td>
+                <td>${s.quantity}</td>
+                <td>${formatPrice(s.avgBuyPrice)}</td>
+                <td>${formatPrice(s.sellPrice)}</td>
+                <td><span style="color:#d4a017">${formatPrice(s.fee)} (${Math.round(s.feePercent * 100)}%)</span></td>
+                <td>${formatPrice(s.net)}</td>
+                <td><span class="${plClass}">${s.pl >= 0 ? '+' : ''}${formatPrice(s.pl)}</span></td>
+                <td><span class="platform-badge">${escapeHtml(s.platform)}</span></td>
+            </tr>`;
+        }).join('');
+
+        // Draw chart
+        drawPLChart(sales);
+    }
+
+    // ===== P/L Chart (pure canvas) =====
+    function drawPLChart(sales) {
+        const canvas = document.getElementById('plChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+
+        // HiDPI support
+        const container = canvas.parentElement;
+        const rect = container.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+        const W = rect.width;
+        const H = rect.height;
+
+        ctx.clearRect(0, 0, W, H);
+
+        if (sales.length === 0) return;
+
+        // Build cumulative P/L by date (chronological order)
+        const sorted = [...sales].sort((a, b) => a.date.localeCompare(b.date));
+        const byDate = new Map();
+        for (const s of sorted) {
+            byDate.set(s.date, (byDate.get(s.date) || 0) + s.pl);
+        }
+        const dates = Array.from(byDate.keys());
+        const dailyPL = Array.from(byDate.values());
+
+        // Cumulative
+        const cumulative = [];
+        let running = 0;
+        for (const v of dailyPL) {
+            running += v;
+            cumulative.push(running);
+        }
+
+        // Chart layout
+        const pad = { top: 30, right: 20, bottom: 40, left: 65 };
+        const cW = W - pad.left - pad.right;
+        const cH = H - pad.top - pad.bottom;
+
+        const minVal = Math.min(0, ...cumulative);
+        const maxVal = Math.max(0, ...cumulative);
+        const range = maxVal - minVal || 1;
+        const buffer = range * 0.1;
+
+        const yMin = minVal - buffer;
+        const yMax = maxVal + buffer;
+        const yRange = yMax - yMin;
+
+        function toX(i) { return pad.left + (cumulative.length === 1 ? cW / 2 : (i / (cumulative.length - 1)) * cW); }
+        function toY(v) { return pad.top + cH - ((v - yMin) / yRange) * cH; }
+
+        // Grid lines
+        const gridLines = 5;
+        ctx.strokeStyle = 'rgba(30, 45, 72, 0.6)';
+        ctx.lineWidth = 1;
+        ctx.font = '11px Inter, sans-serif';
+        ctx.fillStyle = '#8090b0';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+
+        for (let i = 0; i <= gridLines; i++) {
+            const val = yMin + (yRange * i / gridLines);
+            const y = toY(val);
+            ctx.beginPath();
+            ctx.moveTo(pad.left, y);
+            ctx.lineTo(W - pad.right, y);
+            ctx.stroke();
+            ctx.fillText(getCurrency().symbol + val.toFixed(0), pad.left - 8, y);
+        }
+
+        // Zero line
+        const zeroY = toY(0);
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(pad.left, zeroY);
+        ctx.lineTo(W - pad.right, zeroY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Date labels on X axis
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#8090b0';
+        ctx.font = '10px Inter, sans-serif';
+        const maxLabels = Math.min(dates.length, Math.floor(cW / 70));
+        const step = Math.max(1, Math.ceil(dates.length / maxLabels));
+        for (let i = 0; i < dates.length; i += step) {
+            const x = toX(i);
+            const d = dates[i];
+            // Format as DD.MM
+            const parts = d.split('-');
+            const label = parts.length === 3 ? parts[2] + '.' + parts[1] : d;
+            ctx.fillText(label, x, pad.top + cH + 8);
+        }
+
+        // Gradient fill under/over zero
+        const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + cH);
+        const finalVal = cumulative[cumulative.length - 1];
+        if (finalVal >= 0) {
+            grad.addColorStop(0, 'rgba(0, 200, 83, 0.25)');
+            grad.addColorStop(1, 'rgba(0, 200, 83, 0.02)');
+        } else {
+            grad.addColorStop(0, 'rgba(255, 61, 87, 0.02)');
+            grad.addColorStop(1, 'rgba(255, 61, 87, 0.25)');
+        }
+
+        // Fill area
+        ctx.beginPath();
+        ctx.moveTo(toX(0), zeroY);
+        for (let i = 0; i < cumulative.length; i++) {
+            ctx.lineTo(toX(i), toY(cumulative[i]));
+        }
+        ctx.lineTo(toX(cumulative.length - 1), zeroY);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Line
+        ctx.beginPath();
+        for (let i = 0; i < cumulative.length; i++) {
+            const x = toX(i);
+            const y = toY(cumulative[i]);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = finalVal >= 0 ? '#00c853' : '#ff3d57';
+        ctx.lineWidth = 2.5;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        // Data points
+        for (let i = 0; i < cumulative.length; i++) {
+            const x = toX(i);
+            const y = toY(cumulative[i]);
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = cumulative[i] >= 0 ? '#00c853' : '#ff3d57';
+            ctx.fill();
+            ctx.strokeStyle = '#0e1420';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        // Value labels on points (if few enough)
+        if (cumulative.length <= 15) {
+            ctx.font = 'bold 10px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            for (let i = 0; i < cumulative.length; i++) {
+                const x = toX(i);
+                const y = toY(cumulative[i]);
+                ctx.fillStyle = cumulative[i] >= 0 ? '#00c853' : '#ff3d57';
+                ctx.fillText((cumulative[i] >= 0 ? '+' : '') + getCurrency().symbol + cumulative[i].toFixed(0), x, y - 8);
+            }
+        }
+    }
+
+    // ===== Tab Switching =====
+    function initTabs() {
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                tabBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+                const tab = btn.dataset.tab;
+                const targetId = tab === 'portfolio' ? 'tabPortfolio' : 'tabHistory';
+                document.getElementById(targetId).classList.add('active');
+                if (tab === 'history') renderHistoryTab();
+            });
+        });
+    }
+
     // ===== Start =====
     init();
+    initTabs();
 })();

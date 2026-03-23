@@ -64,6 +64,14 @@
 
         <!-- Main Content -->
         <main class="main">
+            <!-- Tab Navigation -->
+            <nav class="tab-nav">
+                <button class="tab-btn active" data-tab="portfolio" data-i18n="tabPortfolio">Portfel</button>
+                <button class="tab-btn" data-tab="history" data-i18n="tabHistory">Historia transakcji</button>
+            </nav>
+
+            <!-- ===== PORTFOLIO TAB ===== -->
+            <div class="tab-content active" id="tabPortfolio">
             <!-- Stats Bar -->
             <section class="stats-section">
                 <div class="stats-bar">
@@ -184,6 +192,79 @@
                     </div>
                 </div>
             </section>
+            </div><!-- end tabPortfolio -->
+
+            <!-- ===== HISTORY TAB ===== -->
+            <div class="tab-content" id="tabHistory">
+                <!-- History Stats -->
+                <section class="stats-section">
+                    <div class="stats-bar">
+                        <div class="stat">
+                            <span class="stat-label" data-i18n="historyTransactions">transakcji</span>
+                            <span class="stat-value" id="histTotalCount">0</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label" data-i18n="historyTotalNet">Łączna sprzedaż (netto)</span>
+                            <span class="stat-value" id="histTotalNet">$0.00</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label" data-i18n="historyTotalFees">Łączne prowizje</span>
+                            <span class="stat-value" id="histTotalFees">$0.00</span>
+                        </div>
+                        <div class="stat stat-pl-total">
+                            <span class="stat-label" data-i18n="historyTotalPL">Zrealizowany Z/S</span>
+                            <span class="stat-value" id="histTotalPL">—</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- P/L Chart -->
+                <section class="panel history-chart-panel">
+                    <div class="panel-header">
+                        <h2 data-i18n="historyChartTitle">Skumulowany zysk/strata w czasie</h2>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="plChart"></canvas>
+                        <div class="chart-empty" id="chartEmpty">
+                            <span data-i18n="historyEmptyDesc">Sprzedaj przedmioty z portfela, aby zobaczyć historię</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- History Table -->
+                <section class="panel history-panel">
+                    <div class="panel-header">
+                        <h2 data-i18n="historyTitle">Zrealizowane transakcje</h2>
+                    </div>
+                    <div class="history-table-wrapper">
+                        <table class="history-table">
+                            <thead>
+                                <tr>
+                                    <th data-i18n="historyDate">Data</th>
+                                    <th data-i18n="historyItem">Przedmiot</th>
+                                    <th data-i18n="historyQty">Ilość</th>
+                                    <th data-i18n="historyBuyPrice">Cena zakupu</th>
+                                    <th data-i18n="historySellPrice">Cena sprzedaży</th>
+                                    <th data-i18n="historyFee">Prowizja</th>
+                                    <th data-i18n="historyNet">Netto</th>
+                                    <th data-i18n="historyPL">Z/S</th>
+                                    <th data-i18n="historyPlatform">Platforma</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody"></tbody>
+                        </table>
+                        <div class="empty-state" id="historyEmptyState">
+                            <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                                <rect x="8" y="16" width="48" height="36" rx="4" stroke="#555" stroke-width="2"/>
+                                <path d="M8 28h48" stroke="#555" stroke-width="2"/>
+                                <path d="M20 38l8-6 8 6 8-10" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <h3 data-i18n="historyEmpty">Brak zrealizowanych transakcji</h3>
+                            <p data-i18n="historyEmptyDesc">Sprzedaj przedmioty z portfela, aby zobaczyć historię</p>
+                        </div>
+                    </div>
+                </section>
+            </div><!-- end tabHistory -->
         </main>
 
         <!-- Transaction Detail Modal -->
