@@ -290,6 +290,64 @@
         en: 'https://flagcdn.com/w40/gb.png',
     };
 
+    // Custom dropdown with flag images
+    function buildFlagSelect(selectEl, flagMap) {
+        const parent = selectEl.parentNode;
+        const container = document.createElement('div');
+        container.className = 'flag-dropdown';
+
+        const selected = document.createElement('div');
+        selected.className = 'flag-dropdown-selected';
+        container.appendChild(selected);
+
+        const optionsList = document.createElement('div');
+        optionsList.className = 'flag-dropdown-options';
+        container.appendChild(optionsList);
+
+        function renderOptions() {
+            optionsList.innerHTML = '';
+            Array.from(selectEl.options).forEach(opt => {
+                const item = document.createElement('div');
+                item.className = 'flag-dropdown-option' + (opt.value === selectEl.value ? ' active' : '');
+                item.dataset.value = opt.value;
+                const flagUrl = flagMap[opt.value];
+                item.innerHTML = (flagUrl ? `<img class="flag-dropdown-flag" src="${flagUrl}" alt="">` : '') +
+                    `<span>${opt.textContent}</span>`;
+                item.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectEl.value = opt.value;
+                    selectEl.dispatchEvent(new Event('change'));
+                    updateSelected();
+                    optionsList.classList.remove('open');
+                });
+                optionsList.appendChild(item);
+            });
+        }
+
+        function updateSelected() {
+            const opt = selectEl.options[selectEl.selectedIndex];
+            const flagUrl = flagMap[selectEl.value];
+            selected.innerHTML = (flagUrl ? `<img class="flag-dropdown-flag" src="${flagUrl}" alt="">` : '') +
+                `<span>${opt ? opt.textContent : ''}</span><span class="flag-dropdown-arrow">&#9662;</span>`;
+            renderOptions();
+        }
+
+        selected.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.flag-dropdown-options.open').forEach(el => {
+                if (el !== optionsList) el.classList.remove('open');
+            });
+            optionsList.classList.toggle('open');
+        });
+
+        document.addEventListener('click', () => optionsList.classList.remove('open'));
+
+        selectEl.style.display = 'none';
+        parent.insertBefore(container, selectEl.nextSibling);
+        updateSelected();
+        selectEl.addEventListener('change', updateSelected);
+    }
+
     // ===== i18n: Apply translations to DOM =====
     function applyI18n() {
         document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -351,7 +409,8 @@
         });
 
         // Build flag+select wrappers
-        // (plain selects now — no custom flag dropdowns)
+        buildFlagSelect(currencySelect, FLAG_URLS);
+        buildFlagSelect(langSelect, FLAG_URLS);
 
         filterSearch.addEventListener('input', renderTable);
         filterPlatform.addEventListener('change', renderTable);
@@ -669,13 +728,8 @@
             const priceData = getCachedPrice(inv.name, invPlatform);
             let livePriceHtml, plHtml;
             if (priceData !== null) {
-                const srcLabel = priceData.source === 'csfloat' ? t('priceSrcCSFloat')
-                    : t('priceSrcSteam');
-                const srcClass = priceData.source === 'csfloat' ? 'price-source price-source-csfloat'
-                    : 'price-source price-source-steam';
-                const srcTag = `<span class="${srcClass}">${escapeHtml(srcLabel)}</span>`;
                 const feeTag = feePercent > 0 ? `<span class="price-fee">${Math.round(feePercent * 100)}% ${t('feeLabel')}</span>` : '';
-                livePriceHtml = `<span class="live-price">${formatPrice(priceData.price)}</span>${srcTag}${feeTag}`;
+                livePriceHtml = `<span class="live-price">${formatPrice(priceData.price)}</span>${feeTag}`;
                 const netLivePrice = priceData.price * (1 - feePercent);
                 const unrealizedPL = (netLivePrice * heldQty) - (avgPrice * heldQty);
                 const pl = unrealizedPL + realizedPL;
