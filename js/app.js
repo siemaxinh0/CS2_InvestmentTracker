@@ -676,7 +676,7 @@
         const searchQuery = filterSearch.value.trim().toLowerCase();
         const platformFilter = filterPlatform.value;
 
-        let filtered = investments;
+        let filtered = investments.filter(inv => calcHeldQuantity(inv) > 0);
 
         if (searchQuery) {
             filtered = filtered.filter(inv =>
@@ -864,10 +864,15 @@
 
     // ===== Stats =====
     function updateStats() {
-        totalInvestmentsEl.textContent = investments.length;
+        const activeInvestments = investments.filter(inv => calcHeldQuantity(inv) > 0);
+        totalInvestmentsEl.textContent = activeInvestments.length;
 
-        const totalQty = investments.reduce((sum, inv) => sum + calcTotalQuantity(inv), 0);
-        const totalSpent = investments.reduce((sum, inv) => sum + calcTotalSpent(inv), 0);
+        const totalQty = activeInvestments.reduce((sum, inv) => sum + calcHeldQuantity(inv), 0);
+        const totalSpent = activeInvestments.reduce((sum, inv) => {
+            const held = calcHeldQuantity(inv);
+            const avg = calcAvgPrice(inv);
+            return sum + (avg * held);
+        }, 0);
 
         totalValueEl.textContent = totalQty + ' ' + t('unitPcs');
         totalCostEl.textContent = formatPrice(totalSpent);
@@ -1148,13 +1153,25 @@
     }
 
     // ===== Public API (for onclick handlers in HTML) =====
+    function deleteHistorySale(investmentId, saleId) {
+        const inv = investments.find(i => i.id === investmentId);
+        if (!inv || !inv.sales) return;
+        if (!confirm(t('sellDeleteConfirm'))) return;
+        inv.sales = inv.sales.filter(s => s.id !== saleId);
+        saveInvestments();
+        renderTable();
+        updateStats();
+        renderHistoryTab();
+    }
+
     window.app = {
         showTranches,
         addTranche,
         deleteInvestment,
         deleteTranche,
         sellInvestment,
-        deleteSale
+        deleteSale,
+        deleteHistorySale
     };
 
     // ===== History Tab =====
@@ -1171,6 +1188,8 @@
                 const costBasis = avgCost * sale.quantity;
                 const pl = net - costBasis;
                 sales.push({
+                    investmentId: inv.id,
+                    saleId: sale.id,
                     date: sale.date,
                     itemName: inv.name,
                     image: inv.image,
@@ -1254,6 +1273,7 @@
                 <td>${formatPrice(s.net)}</td>
                 <td><span class="${plClass}">${s.pl >= 0 ? '+' : ''}${formatPrice(s.pl)}</span></td>
                 <td><span class="platform-badge">${escapeHtml(s.platform)}</span></td>
+                <td><button class="btn btn-sm btn-danger" onclick="window.app.deleteHistorySale('${s.investmentId}', '${s.saleId}')">✕</button></td>
             </tr>`;
         }).join('');
 
