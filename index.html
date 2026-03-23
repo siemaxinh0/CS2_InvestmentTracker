@@ -10,7 +10,75 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="app">
+    <!-- Auth Screen -->
+    <div class="auth-screen" id="authScreen">
+        <div class="auth-card">
+            <div class="auth-logo">
+                <svg width="48" height="48" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="40" height="40" rx="10" fill="url(#logoBgAuth)"/>
+                    <rect x="8" y="14" width="24" height="16" rx="2.5" stroke="rgba(255,255,255,0.85)" stroke-width="1.6" fill="none"/>
+                    <line x1="8" y1="19.5" x2="32" y2="19.5" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+                    <path d="M15 14v-2.5a1.5 1.5 0 011.5-1.5h7a1.5 1.5 0 011.5 1.5V14" stroke="rgba(255,255,255,0.7)" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+                    <rect x="18" y="17.5" width="4" height="4" rx="1" fill="rgba(255,255,255,0.25)" stroke="rgba(255,255,255,0.6)" stroke-width="0.8"/>
+                    <circle cx="20" cy="19.5" r="1" fill="#a29bfe"/>
+                    <path d="M13 25l3-2 4 3 4-4 3 2" stroke="rgba(255,255,255,0.5)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                    <defs><linearGradient id="logoBgAuth" x1="0" y1="0" x2="40" y2="40"><stop offset="0%" stop-color="#6C5CE7"/><stop offset="100%" stop-color="#4834d4"/></linearGradient></defs>
+                </svg>
+                <h1 class="auth-brand">skintracker</h1>
+            </div>
+            <p class="auth-subtitle" data-i18n="authSubtitle">Zaloguj się, aby śledzić swoje inwestycje</p>
+
+            <!-- Auth error message -->
+            <div class="auth-error" id="authError"></div>
+
+            <!-- Login Form -->
+            <div class="auth-form" id="authLoginForm">
+                <div class="auth-field">
+                    <label data-i18n="authEmail">Email</label>
+                    <input type="email" id="authEmailInput" placeholder="email@example.com" autocomplete="email">
+                </div>
+                <div class="auth-field">
+                    <label data-i18n="authPassword">Hasło</label>
+                    <input type="password" id="authPasswordInput" placeholder="••••••••" autocomplete="current-password">
+                </div>
+                <button class="btn btn-primary auth-btn" id="btnLogin" data-i18n="authLogin">Zaloguj się</button>
+                <p class="auth-switch">
+                    <span data-i18n="authNoAccount">Nie masz konta?</span>
+                    <a href="#" id="showRegister" data-i18n="authRegisterLink">Zarejestruj się</a>
+                </p>
+            </div>
+
+            <!-- Register Form (hidden by default) -->
+            <div class="auth-form auth-hidden" id="authRegisterForm">
+                <div class="auth-field">
+                    <label data-i18n="authEmail">Email</label>
+                    <input type="email" id="authRegEmailInput" placeholder="email@example.com" autocomplete="email">
+                </div>
+                <div class="auth-field">
+                    <label data-i18n="authPassword">Hasło</label>
+                    <input type="password" id="authRegPasswordInput" placeholder="Min. 6 znaków" autocomplete="new-password">
+                </div>
+                <div class="auth-field">
+                    <label data-i18n="authPasswordConfirm">Potwierdź hasło</label>
+                    <input type="password" id="authRegPasswordConfirm" placeholder="••••••••" autocomplete="new-password">
+                </div>
+                <button class="btn btn-primary auth-btn" id="btnRegister" data-i18n="authRegister">Zarejestruj się</button>
+                <p class="auth-switch">
+                    <span data-i18n="authHaveAccount">Masz już konto?</span>
+                    <a href="#" id="showLogin" data-i18n="authLoginLink">Zaloguj się</a>
+                </p>
+            </div>
+
+            <div class="auth-divider"><span data-i18n="authOr">lub</span></div>
+
+            <button class="btn auth-btn auth-google-btn" id="btnGoogleLogin">
+                <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                <span data-i18n="authGoogle">Kontynuuj z Google</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="app auth-hidden" id="appMain">
         <!-- Header -->
         <header class="header">
             <div class="header-brand">
@@ -52,6 +120,11 @@
                     <option value="pl">PL</option>
                     <option value="en">EN</option>
                 </select>
+                <span class="header-divider"></span>
+                <div class="user-menu" id="userMenu">
+                    <span class="user-avatar" id="userAvatar"></span>
+                    <button class="btn-logout" id="btnLogout" data-i18n="authLogout">Wyloguj</button>
+                </div>
             </div>
         </header>
 
@@ -77,7 +150,7 @@
                         <span class="stat-value" id="totalCost">$0.00</span>
                     </div>
                     <div class="stat stat-pl-total">
-                        <span class="stat-label" data-i18n="statTotalPL">Łączny Z/S</span>
+                        <span class="stat-label" data-i18n="statTotalPL">Łączny zysk/strata</span>
                         <span class="stat-value" id="totalPL">—</span>
                     </div>
                 </div>
@@ -274,8 +347,13 @@
         <svg width="22" height="22" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
     </a>
 
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
     <script src="js/i18n.js"></script>
     <script src="js/cs2db.js"></script>
+    <script src="js/auth.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

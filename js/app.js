@@ -234,7 +234,7 @@
 
     // ===== State =====
     const STORAGE_KEY = 'cs2_investments';
-    let investments = loadInvestments();
+    let investments = [];
     let currentSort = { field: 'name', dir: 'asc' };
     let selectedAutocompleteIndex = -1;
 
@@ -267,7 +267,7 @@
     const totalPLEl = document.getElementById('totalPL');
 
     // ===== Persistence =====
-    function loadInvestments() {
+    function loadInvestmentsLocal() {
         try {
             const data = localStorage.getItem(STORAGE_KEY);
             return data ? JSON.parse(data) : [];
@@ -278,6 +278,10 @@
 
     function saveInvestments() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(investments));
+        // Async save to Firestore (fire-and-forget)
+        if (window.FireDB) {
+            window.FireDB.saveInvestments(investments);
+        }
     }
 
     // ===== Flag URLs (Flagcdn.com - public domain) =====
@@ -399,6 +403,7 @@
             applyI18n();
             renderTable();
             updateStats();
+            if (window.FireDB) window.FireDB.saveSettings({ currency: currentCurrency, lang: I18N.getLang() });
         });
 
         langSelect.addEventListener('change', () => {
@@ -406,6 +411,7 @@
             applyI18n();
             renderTable();
             updateStats();
+            if (window.FireDB) window.FireDB.saveSettings({ currency: currentCurrency, lang: I18N.getLang() });
         });
 
         // Build flag+select wrappers
@@ -1449,7 +1455,49 @@
         });
     }
 
-    // ===== Start =====
-    init();
-    initTabs();
+    // ===== Start (auth-aware) =====
+    let _initialized = false;
+
+    async function startApp(user) {
+        if (_initialized) {
+            // Re-login: reload data from cloud
+            const cloud = await window.FireDB.loadInvestments();
+            investments = cloud.length ? cloud : loadInvestmentsLocal();
+            renderTable();
+            updateStats();
+            return;
+        }
+        _initialized = true;
+
+        // Load investments: prefer Firestore, fall back to localStorage
+        const cloud = await window.FireDB.loadInvestments();
+        if (cloud.length) {
+            investments = cloud;
+            // Sync to localStorage
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(investments));
+        } else {
+            investments = loadInvestmentsLocal();
+            // If user had local data, push it to cloud
+            if (investments.length) {
+                window.FireDB.saveInvestments(investments);
+            }
+        }
+
+        // Load settings
+        const settings = await window.FireDB.loadSettings();
+        if (settings) {
+            if (settings.currency && CURRENCIES[settings.currency]) {
+                currentCurrency = settings.currency;
+                localStorage.setItem(CURRENCY_KEY, currentCurrency);
+            }
+            if (settings.lang) {
+                I18N.setLang(settings.lang);
+            }
+        }
+
+        init();
+        initTabs();
+    }
+
+    window._registerAuthCallback(startApp);
 })();
