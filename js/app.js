@@ -781,7 +781,7 @@
                 <td>
                     <div class="actions-cell">
                         <button class="btn btn-sm btn-ghost" onclick="window.app.addTranche('${inv.id}')" title="+">+</button>
-                        ${heldQty > 0 ? `<button class="btn btn-sm btn-sell" onclick="window.app.sellInvestment('${inv.id}')" title="${t('sellTitle')}">💰</button>` : ''}
+                        ${heldQty > 0 ? `<button class="btn btn-sm btn-sell" onclick="window.app.sellInvestment('${inv.id}')" title="${t('sellTitle')}">${t('sellTitle')}</button>` : ''}
                         <button class="btn btn-sm btn-danger" onclick="window.app.deleteInvestment('${inv.id}')" title="✕">✕</button>
                     </div>
                 </td>

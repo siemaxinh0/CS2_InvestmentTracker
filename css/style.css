@@ -775,6 +775,13 @@ body {
     justify-content: center;
 }
 
+.investments-table th:last-child,
+.investments-table td:last-child,
+.history-table th:last-child,
+.history-table td:last-child {
+    text-align: center;
+}
+
 /* ===== Empty State ===== */
 .empty-state {
     display: flex;
