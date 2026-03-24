@@ -875,23 +875,22 @@
 
         // Total P/L (realized + unrealized after fees)
         let totalPL = 0;
-        let hasAnyData = false;
+        let hasPrices = false;
         for (const inv of investments) {
             const invPlatform = inv.platform || (inv.tranches[0] ? inv.tranches[0].platform : '');
             const feePercent = getFeePercent(invPlatform);
             const heldQty = calcHeldQuantity(inv);
             const avgCost = calcAvgPrice(inv);
             const priceData = getCachedPrice(inv.name, invPlatform);
-            const rpl = calcRealizedPL(inv);
-            if (rpl !== 0) hasAnyData = true;
-            totalPL += rpl;
+            totalPL += calcRealizedPL(inv);
             if (priceData !== null) {
-                hasAnyData = true;
+                hasPrices = true;
                 const netLivePrice = priceData.price * (1 - feePercent);
                 totalPL += (netLivePrice * heldQty) - (avgCost * heldQty);
             }
         }
-        if (hasAnyData) {
+        const showPL = totalPL !== 0 || hasPrices;
+        if (showPL) {
             totalPLEl.textContent = (totalPL >= 0 ? '+' : '') + formatPrice(totalPL);
             totalPLEl.className = 'stat-value ' + (totalPL >= 0 ? 'stat-pl-positive' : 'stat-pl-negative');
         } else {
